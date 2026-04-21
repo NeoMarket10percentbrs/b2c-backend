@@ -4,15 +4,15 @@ from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
 from core.security import decode_access_token
-from models.seller import Seller
-from services.seller_service import get_seller_by_id
+from models.buyer import Buyer
+from services.buyer_service import get_buyer_by_id
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-async def get_current_seller(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> Seller:
+async def get_current_buyer(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> Buyer:
     try:
-        seller_id = decode_access_token(token)
+        buyer_id = decode_access_token(token)
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -20,11 +20,16 @@ async def get_current_seller(token: str = Depends(oauth2_scheme), db: AsyncSessi
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    seller = await get_seller_by_id(db, seller_id)
-    if not seller:
+    buyer = await get_buyer_by_id(db, buyer_id)
+    if not buyer:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Продавец не найден",
+            detail="Покупатель не найден",
+        )
+    if not buyer.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Аккаунт деактивирован",
         )
 
-    return seller
+    return buyer
