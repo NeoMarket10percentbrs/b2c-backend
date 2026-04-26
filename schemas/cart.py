@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, field_validator, computed_field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
 from uuid import UUID
 
 
@@ -15,7 +15,7 @@ class CartItemAdd(BaseModel):
 
 
 class CartItemUpdate(BaseModel):
-	quantity: int
+	quantity: int = Field(gt=0)
 
 	@field_validator("quantity")
 	@classmethod
@@ -26,14 +26,18 @@ class CartItemUpdate(BaseModel):
 
 
 class CartItemResponse(BaseModel):
-	model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)
 
-	id: UUID
-	sku_id: UUID
-	quantity: int
-	# sku_info подтягивается из Seller Service (не из БД)
-	sku_name: str | None = None
-	sku_price: int | None = None
+    id: UUID
+    sku_id: UUID
+    quantity: int
+    
+    product_id: UUID | None = None
+    sku_name: str | None = None
+    sku_price: int | None = None
+    image_url: str | None = None
+    stock_quantity: int | None = None
+    is_available: bool = True
 
 
 class CartResponse(BaseModel):
@@ -51,3 +55,19 @@ class CartResponse(BaseModel):
 				continue
 			total += item.sku_price * item.quantity
 		return total
+	
+	@computed_field
+	@property
+	def items_count(self) -> int:
+		return sum(item.quantity for item in self.items)
+	
+
+class CartValidationIssue(BaseModel):
+    sku_id: UUID
+    reason: str  # "not_found" | "out_of_stock" | "insufficient_stock"
+    requested: int
+    available: int | None = None
+
+class CartValidationResponse(BaseModel):
+	is_valid: bool
+	issues: list[CartValidationIssue]

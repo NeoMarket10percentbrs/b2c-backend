@@ -1,7 +1,8 @@
+from datetime import datetime
 import uuid
 import enum
 from typing import TYPE_CHECKING
-from sqlalchemy import BigInteger, ForeignKey, Text, Enum as SAEnum
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Text, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from core.database import Base, TimestampMixin
@@ -37,11 +38,15 @@ class Order(Base, TimestampMixin):
 		nullable=False
 	)
 	status: Mapped[OrderStatus] = mapped_column(
-		SAEnum(OrderStatus), nullable=False, default=OrderStatus.CREATED, index=True
+		SAEnum(OrderStatus),
+		nullable=False, 
+		default=OrderStatus.CREATED, index=True
 	)
 	total_price: Mapped[int] = mapped_column(BigInteger, nullable=False)
 	comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-
+	reserved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 	# Relationships
 	buyer: Mapped["Buyer"] = relationship(back_populates="orders")
 	address: Mapped["Address"] = relationship(back_populates="orders")

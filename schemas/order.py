@@ -7,6 +7,7 @@ from schemas.address import AddressResponse
 
 class OrderCreate(BaseModel):
 	address_id: UUID
+	payment_method_id: UUID | None = None
 	comment: str | None = None
 
 
@@ -15,7 +16,10 @@ class OrderItemResponse(BaseModel):
 
 	id: UUID
 	sku_id: UUID
+	product_id: UUID
+	seller_id: UUID
 	sku_name: str
+	image_url: str | None
 	price: int
 	quantity: int
 
@@ -34,6 +38,7 @@ class OrderResponse(BaseModel):
 	items: list[OrderItemResponse]
 	total_price: int
 	comment: str | None
+	payment_method_id: UUID | None
 	created_at: datetime
 	updated_at: datetime
 
@@ -51,3 +56,6 @@ class OrderShortResponse(BaseModel):
 class OrderListResponse(BaseModel):
 	total: int
 	items: list[OrderShortResponse]
+
+class OrderStatusUpdate(BaseModel):
+    status: OrderStatus

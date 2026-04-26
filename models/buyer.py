@@ -6,10 +6,13 @@ from sqlalchemy.dialects.postgresql import UUID
 from core.database import Base, TimestampMixin
 
 if TYPE_CHECKING:
-	from models.refresh_token import RefreshToken
-	from models.address import Address
-	from models.cart import Cart
-	from models.order import Order
+    from models.address import Address
+    from models.cart import Cart
+    from models.favorite import Favorite
+    from models.notification import Notification
+    from models.order import Order
+    from models.payment_method import PaymentMethod
+    from models.refresh_token import RefreshToken
 
 
 class Buyer(Base, TimestampMixin):
@@ -39,3 +42,12 @@ class Buyer(Base, TimestampMixin):
 		back_populates="buyer", uselist=False, cascade="all, delete-orphan"
 	)
 	orders: Mapped[list["Order"]] = relationship(back_populates="buyer")
+	favorites: Mapped[list["Favorite"]] = relationship(
+        back_populates="buyer", cascade="all, delete-orphan"
+    )
+	notifications: Mapped[list["Notification"]] = relationship(
+        back_populates="buyer", cascade="all, delete-orphan"
+    )
+	payment_methods: Mapped[list["PaymentMethod"]] = relationship(
+        back_populates="buyer", cascade="all, delete-orphan"
+    )

@@ -17,9 +17,10 @@ class Address(Base, TimestampMixin):
 		UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
 	)
 	buyer_id: Mapped[uuid.UUID] = mapped_column(
-		UUID(as_uuid=True),
-		ForeignKey("buyers.id", ondelete="CASCADE"),
-		nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("buyers.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
 	)
 	label: Mapped[str | None] = mapped_column(String(100), nullable=True)
 	country: Mapped[str] = mapped_column(String(100), nullable=False)
