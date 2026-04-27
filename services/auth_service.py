@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import UUID, select, delete
 from sqlalchemy.exc import IntegrityError
 from models.refresh_token import RefreshToken
 from models.buyer import Buyer
@@ -118,3 +118,14 @@ async def _issue_tokens(db: AsyncSession, buyer: Buyer) -> TokenResponse:
 		access_token=access_token,
 		refresh_token=raw_refresh,
 	)
+
+	
+async def revoke_all_buyer_tokens(db: AsyncSession, buyer_id: UUID) -> None:
+    result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.buyer_id == buyer_id, RefreshToken.revoked.is_(False)
+        )
+    )
+    for token in result.scalars().all():
+        token.revoked = True
+    await db.commit()

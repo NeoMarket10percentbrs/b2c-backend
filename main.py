@@ -9,6 +9,7 @@ import httpx
 from core.database import engine, Base
 from core.config import settings
 from routers import routes
+from services.b2b import close_b2b_client, init_b2b_client
 
 load_dotenv()
 
@@ -26,7 +27,9 @@ async def lifespan(app: FastAPI):
 	)
 
 	try:
-		None
+		init_b2b_client()
+		yield
+		await close_b2b_client()
 	except Exception as e:
 		print(f"Failed to initialize database: {e}")
 		if settings.ENV == "production":
@@ -49,6 +52,7 @@ app = FastAPI(
 app.add_middleware(
 	CORSMiddleware,
 	allow_origins=["*"],
+	allow_credentials=True,
 	allow_methods=["*"],
 	allow_headers=["*"],
 )

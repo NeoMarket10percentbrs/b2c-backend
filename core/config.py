@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +20,10 @@ class Settings(BaseSettings):
     APP_RELOAD: bool = True
     APP_LOG_LEVEL: str = "debug"
     APP_PROTOCOL: str = "http"
+
+    # B2B service
+    b2b_base_url: str = Field(default="http://localhost:8000")
+    b2b_timeout_seconds: float = 5.0
 
     # Security (JWT)
     SECRET_KEY: str
