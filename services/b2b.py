@@ -91,19 +91,19 @@ class B2BClient:
             params["max_price"] = max_price
         if seller_id:
             params["seller_id"] = str(seller_id)
-        return await self._request("GET", "/api/products", params=params)
+        return await self._request("GET", "/api/public/products", params=params)
 
     async def get_product(self, product_id: UUID) -> dict:
-        return await self._request("GET", f"/api/products/{product_id}")
+        return await self._request("GET", f"/api/public/products/{product_id}")
 
     async def get_similar_products(self, product_id: UUID, limit: int = 10) -> list[dict]:
         data = await self._request(
-            "GET", f"/api/products/{product_id}/similar", params={"limit": limit}
+            "GET", f"/api/public/products/{product_id}/similar", params={"limit": limit}
         )
         return data or []
 
     async def get_sku(self, sku_id: UUID) -> dict:
-        return await self._request("GET", f"/api/skus/{sku_id}")
+        return await self._request("GET", f"/api/public/skus/{sku_id}")
 
     async def get_skus_bulk(self, sku_ids: list[UUID]) -> dict[UUID, dict]:
         if not sku_ids:
@@ -136,12 +136,12 @@ class B2BClient:
         return result
 
     async def get_categories_tree(self) -> list[dict]:
-        data = await self._request("GET", "/api/categories/tree")
+        data = await self._request("GET", "/api/public/categories/tree")
         return data or []
 
     async def get_breadcrumbs(self, category_id: UUID) -> list[dict]:
         data = await self._request(
-            "GET", f"/api/categories/{category_id}/breadcrumbs"
+            "GET", f"/api/public/categories/{category_id}/breadcrumbs"
         )
         return data or []
 
