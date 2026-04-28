@@ -178,11 +178,12 @@ _b2b_client: B2BClient | None = None
 
 
 def init_b2b_client() -> B2BClient:
+    print(settings.B2B_BASE_URL)
     global _b2b_client
     _b2b_client = B2BClient(
-        base_url=settings.b2b_base_url,
-        internal_token=settings.b2b_internal_token,
-        timeout=settings.b2b_timeout_seconds,
+        base_url=settings.B2B_BASE_URL,
+        internal_token=settings.B2B_INTERNAL_TOKEN,
+        timeout=settings.B2B_TIMEOUT_SECONDS,
     )
     return _b2b_client
 

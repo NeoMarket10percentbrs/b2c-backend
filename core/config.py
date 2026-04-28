@@ -22,9 +22,9 @@ class Settings(BaseSettings):
     APP_PROTOCOL: str = "http"
 
     # B2B service
-    b2b_base_url: str = Field(default="http://localhost:8000")
-    b2b_internal_token: str = ""
-    b2b_timeout_seconds: float = 5.0
+    B2B_BASE_URL: str = Field(default="http://localhost:8000")
+    B2B_INTERNAL_TOKEN: str = ""
+    B2B_TIMEOUT_SECONDS: float = 5.0
 
     # Security (JWT)
     SECRET_KEY: str

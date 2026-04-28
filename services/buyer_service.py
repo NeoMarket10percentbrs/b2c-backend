@@ -55,12 +55,7 @@ async def get_buyer_by_email(db: AsyncSession, email: str) -> Buyer | None:
         select(Buyer).where(func.lower(Buyer.email) == normalized_email)
     )
 	buyer = result.scalar_one_or_none()
-    
-	if not buyer:
-		raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Покупатель с таким email не найден"
-        )
+
 	return buyer
 
 

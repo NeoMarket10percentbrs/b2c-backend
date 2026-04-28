@@ -42,6 +42,11 @@ async def register(db: AsyncSession, data: BuyerCreate) -> Buyer:
 
 async def login(db: AsyncSession, email: str, password: str) -> TokenResponse:
 	buyer = await get_buyer_by_email(db, email)
+	if not buyer:
+		raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Покупатель с таким email не найден"
+        )
 	if not buyer or not verify_password(password, buyer.password_hash):
 		raise HTTPException(
 			status_code=status.HTTP_401_UNAUTHORIZED,
