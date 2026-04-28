@@ -9,10 +9,11 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
+      PGPORT: ${DB_PORT}
     volumes:
       - ./b2c_postgres_data:/var/lib/postgresql
     ports:
-      - "5433:5432"
+      - "${DB_PORT}:${DB_PORT}"
 
   # -- App ---------------------------------------------------
   b2c_app:
