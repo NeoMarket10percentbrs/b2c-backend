@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.payment_method import PaymentMethod
 from schemas.payment_method import PaymentMethodCreate, PaymentMethodUpdate
-from helpers.help import _unset_other_defaults, _get_method_or_404
+from helpers.help import _unset_default_payment_methods, _get_method_or_404
 
 
 async def list_payment_methods(db: AsyncSession, buyer_id: UUID) -> list[PaymentMethod]:
@@ -30,8 +30,7 @@ async def create_payment_method(
     is_default = data.is_default or not has_any
 
     if is_default:
-        from helpers.help import _unset_other_defaults
-        await _unset_other_defaults(db, buyer_id, model=PaymentMethod)
+        await _unset_default_payment_methods(db, buyer_id, model=PaymentMethod)
 
     method = PaymentMethod(
         buyer_id=buyer_id,
@@ -54,8 +53,7 @@ async def update_payment_method(
     method = await _get_method_or_404(db, method_id, buyer_id)
     update_data = data.model_dump(exclude_unset=True)
     if update_data.get("is_default") is True:
-        from helpers.help import _unset_other_defaults
-        await _unset_other_defaults(db, buyer_id, except_id=method.id, model=PaymentMethod)
+        await _unset_default_payment_methods(db, buyer_id, except_id=method.id, model=PaymentMethod)
 
     for key, value in update_data.items():
         setattr(method, key, value)

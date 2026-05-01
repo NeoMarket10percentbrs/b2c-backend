@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.address import Address
 from schemas.address import AddressCreate, AddressUpdate
-from helpers.help import _get_address_or_404, _unset_other_defaults, _get_address_or_404
+from helpers.help import _get_address_or_404, _unset_default_addresses, _get_address_or_404
 
 
 async def get_address(db: AsyncSession, address_id: UUID, buyer_id: UUID) -> Address:
@@ -21,7 +21,7 @@ async def create_address(db: AsyncSession, buyer_id: UUID, data: AddressCreate) 
     
     is_default = data.is_default or not has_any
     if is_default:
-        await _unset_other_defaults(db, buyer_id)
+        await _unset_default_addresses(db, buyer_id)
 
     address = Address(
         buyer_id=buyer_id,
@@ -38,7 +38,7 @@ async def update_address(db: AsyncSession, address_id: UUID, buyer_id: UUID, dat
     
     update_data = data.model_dump(exclude_unset=True)
     if update_data.get("is_default") is True:
-        await _unset_other_defaults(db, buyer_id, except_id=address.id)
+        await _unset_default_addresses(db, buyer_id, except_id=address.id)
 
     for key, value in update_data.items():
         setattr(address, key, value)

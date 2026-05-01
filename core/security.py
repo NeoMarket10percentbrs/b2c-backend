@@ -19,12 +19,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(password_byte, hashed_byte)
 
 
-def create_access_token(seller_id: str) -> str:
+def create_access_token(buyer_id: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
     payload = {
-        "sub": seller_id,
+        "sub": buyer_id,
         "exp": expire,
         "type": "access",
     }

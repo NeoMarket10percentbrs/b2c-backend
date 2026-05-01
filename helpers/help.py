@@ -7,7 +7,7 @@ from models import Address, Buyer, Favorite, PaymentMethod
 from schemas.favorite import FavoriteResponse
 
 
-async def _unset_other_defaults(db: AsyncSession, buyer_id: UUID, except_id: UUID | None = None):
+async def _unset_default_addresses(db: AsyncSession, buyer_id: UUID, except_id: UUID | None = None):
     stmt = (
         update(Address)
         .where(Address.buyer_id == buyer_id, Address.is_default.is_(True))
@@ -58,7 +58,7 @@ async def _get_method_or_404(db: AsyncSession, method_id: UUID, buyer_id: UUID) 
     return method
 
 
-async def _unset_other_defaults(db: AsyncSession, buyer_id: UUID, except_id: UUID | None = None) -> None:
+async def _unset_default_payment_methods(db: AsyncSession, buyer_id: UUID, except_id: UUID | None = None) -> None:
     stmt = (
         update(PaymentMethod)
         .where(
