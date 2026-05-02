@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     B2B_INTERNAL_TOKEN: str = ""
     B2B_TIMEOUT_SECONDS: float = 5.0
 
+    B2C_SERVICE_KEY: str = ""
+
     # Security (JWT)
     SECRET_KEY: str
     ALGORITHM: str = "HS256"

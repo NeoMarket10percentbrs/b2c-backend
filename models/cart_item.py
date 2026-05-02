@@ -24,6 +24,9 @@ class CartItem(Base, TimestampMixin):
 		ForeignKey("carts.id", ondelete="CASCADE"),
 		nullable=False, index=True
 	)
+	product_id: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), nullable=False, index=True
+	)
 	sku_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 	quantity: Mapped[int] = mapped_column(Integer, nullable=False)
 

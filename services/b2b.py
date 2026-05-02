@@ -19,13 +19,13 @@ class B2BConflictError(B2BClientError):
 
 
 class B2BClient:
-    def __init__(self, base_url: str, internal_token: str, timeout: float) -> None:
+    def __init__(self, base_url: str, service_key: str, timeout: float) -> None:
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
             timeout=timeout,
             headers={"User-Agent": "NeoMarket-B2C/1.0"},
         )
-        self._internal_headers = {"X-Internal-Token": internal_token}
+        self._service_headers = {"X-Service-Key": service_key}
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -33,9 +33,9 @@ class B2BClient:
     async def _request(
         self, method: str, path: str, *,
         params: dict[str, Any] | None = None,
-        json: Any = None, internal: bool = False) -> Any:
-        
-        headers = self._internal_headers if internal else None
+        json: Any = None,
+        headers: dict[str, str] | None = None,
+    ) -> Any:
         try:
             response = await self._client.request(
                 method, path, params=params, json=json, headers=headers
@@ -56,9 +56,10 @@ class B2BClient:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Ресурс не найден в B2B"
             )
         if response.status_code == 409:
+            data = _safe_json(response)
             raise B2BConflictError(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=_safe_detail(response, "Конфликт в B2B"),
+                detail=data if isinstance(data, dict) else _safe_detail(response, "Конфликт в B2B"),
             )
         if response.status_code >= 400:
             raise B2BClientError(
@@ -66,12 +67,7 @@ class B2BClient:
                 detail=_safe_detail(response, f"B2B вернул {response.status_code}"),
             )
 
-        if not response.content:
-            return None
-        try:
-            return response.json()
-        except ValueError:
-            return None
+        return _safe_json(response)
 
     async def list_products(
         self, *, category_id: UUID | None = None,
@@ -105,27 +101,12 @@ class B2BClient:
     async def get_sku(self, sku_id: UUID) -> dict:
         return await self._request("GET", f"/api/public/skus/{sku_id}")
 
-    async def get_skus_bulk(self, sku_ids: list[UUID]) -> dict[UUID, dict]:
-        if not sku_ids:
-            return {}
-        data = await self._request(
-            "POST", "/api/skus/bulk",
-            json={"ids": [str(sid) for sid in sku_ids]},
-        )
-        result: dict[UUID, dict] = {}
-        for entry in data or []:
-            try:
-                result[UUID(entry["id"])] = entry
-            except (KeyError, ValueError):
-                continue
-        return result
-
-    async def get_products_bulk(self, product_ids: list[UUID]) -> dict[UUID, dict]:
+    async def get_products_by_ids(self, product_ids: list[UUID]) -> dict[UUID, dict]:
         if not product_ids:
             return {}
+        ids_param = ",".join(str(pid) for pid in product_ids)
         data = await self._request(
-            "POST", "/api/products/bulk",
-            json={"ids": [str(pid) for pid in product_ids]},
+            "GET", "/api/public/products", params={"ids": ids_param}
         )
         result: dict[UUID, dict] = {}
         for entry in data or []:
@@ -145,32 +126,41 @@ class B2BClient:
         )
         return data or []
 
-    async def reserve_stock(self, order_id: UUID, items: list[dict[str, Any]]) -> None:
+    async def reserve(self, idempotency_key: UUID, items: list[dict[str, Any]]) -> dict:
         """items: [{sku_id: str, quantity: int}, ...]"""
-        await self._request(
-            "POST", f"/api/stock/reserve/{order_id}",
-            json=items,
-            internal=True,
+        data = await self._request(
+            "POST", "/api/v1/reserve",
+            json={"idempotency_key": str(idempotency_key), "items": items},
+            headers=self._service_headers,
+        )
+        return data or {"reserved": True, "items": []}
+
+    async def unreserve(self, order_id: UUID, items: list[dict[str, Any]]) -> Any:
+        return await self._request(
+            "POST", "/api/v1/unreserve",
+            json={"order_id": str(order_id), "items": items},
+            headers=self._service_headers,
         )
 
-    async def release_reservation(self, order_id: UUID) -> None:
-        await self._request(
-            "POST", f"/api/stock/reserve/{order_id}/release", internal=True
+    async def fulfill(self, order_id: UUID, items: list[dict[str, Any]]) -> Any:
+        return await self._request(
+            "POST", "/api/v1/fulfill",
+            json={"order_id": str(order_id), "items": items},
+            headers=self._service_headers,
         )
 
-    async def commit_reservation(self, order_id: UUID) -> None:
-        await self._request(
-            "POST", f"/api/stock/reserve/{order_id}/commit", internal=True
-        )
+
+def _safe_json(response: httpx.Response) -> Any:
+    try:
+        return response.json()
+    except ValueError:
+        return None
 
 
 def _safe_detail(response: httpx.Response, fallback: str) -> str:
-    try:
-        data = response.json()
-        if isinstance(data, dict) and "detail" in data:
-            return str(data["detail"])
-    except ValueError:
-        pass
+    data = _safe_json(response)
+    if isinstance(data, dict) and "detail" in data:
+        return str(data["detail"])
     return fallback
 
 
@@ -182,7 +172,7 @@ def init_b2b_client() -> B2BClient:
     global _b2b_client
     _b2b_client = B2BClient(
         base_url=settings.B2B_BASE_URL,
-        internal_token=settings.B2B_INTERNAL_TOKEN,
+        service_key=settings.B2C_SERVICE_KEY,
         timeout=settings.B2B_TIMEOUT_SECONDS,
     )
     return _b2b_client

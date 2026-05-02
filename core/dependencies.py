@@ -1,5 +1,5 @@
+from uuid import UUID
 from fastapi import Depends, HTTPException, Header, status
-from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
@@ -8,10 +8,31 @@ from models.buyer import Buyer
 from services.buyer_service import get_buyer_by_id
 from core.config import settings
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+def _extract_bearer_token(authorization: str | None) -> str:
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Невалидный токен",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Невалидный токен",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return token
 
 
-async def get_current_buyer(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> Buyer:
+async def get_current_buyer(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    db: AsyncSession = Depends(get_db),
+) -> Buyer:
+    token = _extract_bearer_token(authorization)
     try:
         buyer_id = decode_access_token(token)
     except JWTError:
@@ -44,3 +65,29 @@ async def require_internal_token(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Недействительный внутренний токен"
         )
+
+
+async def get_cart_identity(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+) -> dict[str, UUID | str | None]:
+    if authorization:
+        token = _extract_bearer_token(authorization)
+        try:
+            buyer_id = decode_access_token(token)
+            buyer_uuid = UUID(buyer_id)
+        except (JWTError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Невалидный токен",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return {"buyer_id": buyer_uuid, "session_id": None}
+
+    if x_session_id:
+        return {"buyer_id": None, "session_id": x_session_id}
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="MISSING_CART_IDENTITY",
+    )

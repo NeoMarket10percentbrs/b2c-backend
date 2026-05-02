@@ -15,10 +15,12 @@ if TYPE_CHECKING:
 
 class OrderStatus(str, enum.Enum):
 	CREATED = "CREATED"
-	CONFIRMED = "CONFIRMED"
-	SHIPPED = "SHIPPED"
+	PAID = "PAID"
+	ASSEMBLING = "ASSEMBLING"
+	DELIVERING = "DELIVERING"
 	DELIVERED = "DELIVERED"
 	CANCELLED = "CANCELLED"
+	CANCEL_PENDING = "CANCEL_PENDING"
 
 
 class Order(Base, TimestampMixin):
@@ -26,6 +28,9 @@ class Order(Base, TimestampMixin):
 
 	id: Mapped[uuid.UUID] = mapped_column(
 		UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+	)
+	idempotency_key: Mapped[uuid.UUID] = mapped_column(
+		UUID(as_uuid=True), nullable=False, unique=True, index=True
 	)
 	buyer_id: Mapped[uuid.UUID] = mapped_column(
 		UUID(as_uuid=True),

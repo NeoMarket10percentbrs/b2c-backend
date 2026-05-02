@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 import bcrypt
@@ -20,13 +21,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(buyer_id: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
     payload = {
         "sub": buyer_id,
-        "exp": expire,
-        "type": "access",
+        "role": "buyer",
+        "iat": int(now.timestamp()),
+        "exp": int(expire.timestamp()),
+        "jti": str(uuid.uuid4()),
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
@@ -34,14 +38,14 @@ def create_access_token(buyer_id: str) -> str:
 def decode_access_token(token: str) -> str:
     payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
 
-    if payload.get("type") != "access":
-        raise JWTError("Wrong token type")
+    if payload.get("role") != "buyer":
+        raise JWTError("Wrong token role")
 
-    seller_id: str | None = payload.get("sub")
-    if seller_id is None:
+    buyer_id: str | None = payload.get("sub")
+    if buyer_id is None:
         raise JWTError("Missing subject")
 
-    return seller_id
+    return buyer_id
 
 
 def generate_refresh_token() -> str:

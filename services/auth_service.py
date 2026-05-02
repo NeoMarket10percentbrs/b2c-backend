@@ -13,9 +13,10 @@ from core.security import (
 )
 from core.config import settings
 from services.buyer_service import get_buyer_by_email, get_buyer_by_id, create_buyer
+from services.cart_service import merge_guest_cart
 
 
-async def register(db: AsyncSession, data: BuyerCreate) -> Buyer:
+async def register(db: AsyncSession, data: BuyerCreate) -> TokenResponse:
 	existing = await get_buyer_by_email(db, data.email)
 	if existing:
 		raise HTTPException(
@@ -37,10 +38,12 @@ async def register(db: AsyncSession, data: BuyerCreate) -> Buyer:
 
 	await db.refresh(new_buyer)
 
-	return new_buyer
+	return await _issue_tokens(db, new_buyer)
 
 
-async def login(db: AsyncSession, email: str, password: str) -> TokenResponse:
+async def login(
+    db: AsyncSession, email: str, password: str, session_id: str | None
+) -> TokenResponse:
 	buyer = await get_buyer_by_email(db, email)
 	if not buyer:
 		raise HTTPException(
@@ -52,6 +55,8 @@ async def login(db: AsyncSession, email: str, password: str) -> TokenResponse:
 			status_code=status.HTTP_401_UNAUTHORIZED,
 			detail="Неверный email или пароль",
 		)
+	if session_id:
+		await merge_guest_cart(db, buyer.id, session_id)
 	return await _issue_tokens(db, buyer)
 
 
@@ -120,8 +125,10 @@ async def _issue_tokens(db: AsyncSession, buyer: Buyer) -> TokenResponse:
 	await db.commit()
 
 	return TokenResponse(
+		user_id=str(buyer.id),
 		access_token=access_token,
 		refresh_token=raw_refresh,
+		expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
 	)
 
 	
