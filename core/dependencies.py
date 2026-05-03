@@ -1,5 +1,6 @@
 from uuid import UUID
 from fastapi import Depends, HTTPException, Header, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
@@ -7,6 +8,9 @@ from core.security import decode_access_token
 from models.buyer import Buyer
 from services.buyer_service import get_buyer_by_id
 from core.config import settings
+
+
+security = HTTPBearer()
 
 
 def _extract_bearer_token(authorization: str | None) -> str:
@@ -29,10 +33,10 @@ def _extract_bearer_token(authorization: str | None) -> str:
 
 
 async def get_current_buyer(
-    authorization: str | None = Header(default=None, alias="Authorization"),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> Buyer:
-    token = _extract_bearer_token(authorization)
+    token = credentials.credentials
     try:
         buyer_id = decode_access_token(token)
     except JWTError:
