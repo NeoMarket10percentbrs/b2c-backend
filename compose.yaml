@@ -14,6 +14,8 @@ services:
       - ./b2c_postgres_data:/var/lib/postgresql
     ports:
       - "${DB_PORT}:${DB_PORT}"
+    networks:
+      - marketplace
 
   # -- App ---------------------------------------------------
   b2c_app:
@@ -27,6 +29,12 @@ services:
     depends_on:
       - b2c_postgresql
     restart: unless-stopped
+    networks:
+      - marketplace
 
 volumes:
   b2c_postgres_data:
+
+networks:
+  marketplace:
+    external: true
