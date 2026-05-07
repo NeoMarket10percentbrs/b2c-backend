@@ -31,6 +31,12 @@ async def add_item(
     db: AsyncSession, buyer_id: UUID,
     sku_id: UUID, quantity: int, b2b: B2BClient
 ) -> Cart:
+    if quantity <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Количество должно быть больше нуля",
+        )
+
     try:
         sku = await b2b.get_sku(sku_id)
     except B2BNotFoundError:
@@ -43,10 +49,11 @@ async def add_item(
     existing = next((i for i in cart.items if i.sku_id == sku_id), None)
     new_qty = (existing.quantity if existing else 0) + quantity
 
-    if sku.get("stock_quantity", 0) < new_qty:
+    stock = int(sku.get("stock_quantity") or 0)
+    if stock < new_qty:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Недостаточно товара. Доступно: {sku.get('stock_quantity', 0)}",
+            detail=f"Недостаточно товара. Доступно: {stock}",
         )
 
     if existing:
@@ -63,6 +70,12 @@ async def update_item(
     db: AsyncSession, buyer_id: UUID, item_id: UUID,
     quantity: int, b2b: B2BClient
 ) -> Cart:
+    if quantity <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Количество должно быть больше нуля",
+        )
+
     cart = await get_or_create_cart(db, buyer_id)
     item = next((i for i in cart.items if i.id == item_id), None)
     if item is None:
@@ -79,10 +92,11 @@ async def update_item(
             detail="SKU больше не доступен в каталоге",
         )
 
-    if sku.get("stock_quantity", 0) < quantity:
+    stock = int(sku.get("stock_quantity") or 0)
+    if stock < quantity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Недостаточно товара. Доступно: {sku.get('stock_quantity', 0)}",
+            detail=f"Недостаточно товара. Доступно: {stock}",
         )
 
     item.quantity = quantity
