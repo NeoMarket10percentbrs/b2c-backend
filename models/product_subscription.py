@@ -1,25 +1,24 @@
 import uuid
 from typing import TYPE_CHECKING
-from sqlalchemy import ForeignKey, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.database import Base, TimestampMixin
-
 
 if TYPE_CHECKING:
     from models.buyer import Buyer
 
 
-class Favorite(Base, TimestampMixin):
-    __tablename__ = "favorites"
+class ProductSubscription(Base, TimestampMixin):
+    __tablename__ = "product_subscriptions"
     __table_args__ = (
-        UniqueConstraint("buyer_id", "product_id", name="buyer_product"),
+        UniqueConstraint("user_id", "product_id", name="user_product_subscription"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    buyer_id: Mapped[uuid.UUID] = mapped_column(
+    user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("buyers.id", ondelete="CASCADE"),
         nullable=False,
@@ -28,5 +27,6 @@ class Favorite(Base, TimestampMixin):
     product_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False, index=True
     )
+    notify_on: Mapped[list[str]] = mapped_column(ARRAY(String(50)), nullable=False)
 
-    buyer: Mapped["Buyer"] = relationship(back_populates="favorites")
+    user: Mapped["Buyer"] = relationship()

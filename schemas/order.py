@@ -6,6 +6,7 @@ from schemas.address import AddressResponse
 
 
 class OrderCreate(BaseModel):
+	idempotency_key: UUID
 	address_id: UUID
 	payment_method_id: UUID | None = None
 	comment: str | None = None
@@ -17,16 +18,18 @@ class OrderItemResponse(BaseModel):
 	id: UUID
 	sku_id: UUID
 	product_id: UUID
+	product_title: str
 	seller_id: UUID
 	sku_name: str
 	image_url: str | None
-	price: int
+	unit_price: int
+	line_total: int
 	quantity: int
 
 	@computed_field
 	@property
 	def item_total(self) -> int:
-		return self.price * self.quantity
+		return self.line_total
 
 
 class OrderResponse(BaseModel):

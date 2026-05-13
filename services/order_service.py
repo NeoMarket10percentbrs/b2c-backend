@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from .b2b import B2BClient, B2BClientError, B2BConflictError
+from .b2b import B2BClient, B2BClientError
 from models.address import Address
 from models.order import Order, OrderStatus
 from models.order_item import OrderItem
@@ -13,9 +13,17 @@ from services.cart_service import get_or_create_cart, validate_cart
 
 async def create_order(
     db: AsyncSession, buyer_id: UUID,
-    address_id: UUID, comment: str | None,
+    idempotency_key: UUID, address_id: UUID, comment: str | None,
     b2b: B2BClient) -> Order:
-    cart = await get_or_create_cart(db, buyer_id)
+    existing = await db.execute(
+        select(Order)
+        .where(Order.idempotency_key == idempotency_key)
+        .options(selectinload(Order.items), selectinload(Order.address))
+    )
+    if existing_order := existing.scalar_one_or_none():
+        return existing_order
+
+    cart = await get_or_create_cart(db, buyer_id, None)
     if not cart.items:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Корзина пуста"
@@ -37,23 +45,23 @@ async def create_order(
             },
         )
 
-    sku_ids = [item.sku_id for item in cart.items]
-    skus = await b2b.get_skus_bulk(sku_ids)
-
-    order = Order(
-        buyer_id=buyer_id,
-        address_id=address.id,
-        status=OrderStatus.CREATED,
-        total_price=0,
-        comment=comment,
-    )
-    db.add(order)
-    await db.flush()
+    product_ids = [item.product_id for item in cart.items]
+    products = await b2b.get_products_by_ids(product_ids)
+    sku_index: dict[UUID, dict] = {}
+    for product in products.values():
+        for sku in product.get("skus", []) or []:
+            sku_id = sku.get("id")
+            if sku_id:
+                try:
+                    sku_index[UUID(sku_id)] = sku
+                except ValueError:
+                    continue
 
     total = 0
     reserve_payload: list[dict] = []
+    order_items: list[OrderItem] = []
     for cart_item in cart.items:
-        sku = skus.get(cart_item.sku_id)
+        sku = sku_index.get(cart_item.sku_id)
         if sku is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -63,15 +71,16 @@ async def create_order(
         line_total = price * cart_item.quantity
         total += line_total
 
-        db.add(
+        order_items.append(
             OrderItem(
-                order_id=order.id,
                 sku_id=cart_item.sku_id,
                 product_id=UUID(sku["product_id"]),
+                product_title=sku.get("product_title") or sku.get("name", ""),
                 seller_id=UUID(sku["seller_id"]),
                 sku_name=sku.get("name", ""),
                 image_url=sku.get("image_url"),
-                price=price,
+                unit_price=price,
+                line_total=line_total,
                 quantity=cart_item.quantity,
             )
         )
@@ -79,21 +88,30 @@ async def create_order(
             {"sku_id": str(cart_item.sku_id), "quantity": cart_item.quantity}
         )
 
-    order.total_price = total
-
-    try:
-        await b2b.reserve_stock(order.id, reserve_payload)
-    except B2BConflictError as exc:
-        await db.rollback()
+    reserve_result = await b2b.reserve(idempotency_key, reserve_payload)
+    if not reserve_result.get("reserved", False):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Не удалось зарезервировать товар: {exc.detail}",
+            detail={
+                "message": "Часть товаров недоступна",
+                "failed_items": reserve_result.get("failed_items", []),
+            },
         )
-    except B2BClientError:
-        await db.rollback()
-        raise
 
-    order.reserved_at = datetime.now(timezone.utc)
+    order = Order(
+        idempotency_key=idempotency_key,
+        buyer_id=buyer_id,
+        address_id=address.id,
+        status=OrderStatus.PAID,
+        total_price=total,
+        comment=comment,
+        reserved_at=datetime.now(timezone.utc),
+    )
+    db.add(order)
+    await db.flush()
+    for item in order_items:
+        item.order_id = order.id
+        db.add(item)
 
     for item in list(cart.items):
         await db.delete(item)
@@ -102,7 +120,7 @@ async def create_order(
         await db.commit()
     except Exception:
         try:
-            await b2b.release_reservation(order.id)
+            await b2b.unreserve(order.id, reserve_payload)
         except Exception:
             pass
         raise
@@ -116,35 +134,46 @@ async def create_order(
 
 
 async def cancel_order(db: AsyncSession, buyer_id: UUID, order_id: UUID, b2b: B2BClient) -> Order:
-    order = await db.get(Order, order_id)
+    result = await db.execute(
+        select(Order)
+        .where(Order.id == order_id)
+        .options(selectinload(Order.items), selectinload(Order.address))
+    )
+    order = result.scalar_one_or_none()
     if order is None or order.buyer_id != buyer_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден"
         )
 
-    if order.status in (OrderStatus.SHIPPED, OrderStatus.DELIVERED):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Этот заказ уже нельзя отменить",
-        )
     if order.status == OrderStatus.CANCELLED:
         return order
+    if order.status == OrderStatus.CANCEL_PENDING:
+        return order
+    if order.status in (OrderStatus.ASSEMBLING, OrderStatus.DELIVERING, OrderStatus.DELIVERED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="CANCEL_NOT_ALLOWED",
+        )
+
+    unreserve_payload = [
+        {"sku_id": str(item.sku_id), "quantity": item.quantity}
+        for item in order.items
+    ]
 
     try:
-        await b2b.release_reservation(order.id)
+        await b2b.unreserve(order.id, unreserve_payload)
+        order.status = OrderStatus.CANCELLED
     except B2BClientError as exc:
-        if exc.status_code != status.HTTP_404_NOT_FOUND:
+        if exc.status_code in (
+            status.HTTP_502_BAD_GATEWAY,
+            status.HTTP_504_GATEWAY_TIMEOUT,
+        ):
+            order.status = OrderStatus.CANCEL_PENDING
+        else:
             raise
-
-    order.status = OrderStatus.CANCELLED
     await db.commit()
 
-    result = await db.execute(
-        select(Order)
-        .where(Order.id == order.id)
-        .options(selectinload(Order.items), selectinload(Order.address))
-    )
-    return result.scalar_one()
+    return order
 
 
 async def list_orders(db: AsyncSession, buyer_id: UUID, page: int, size: int):

@@ -41,7 +41,7 @@ async def _get_buyer_or_404(db: AsyncSession, buyer_id: UUID) -> Buyer:
 def _enrich_favorite(fav: Favorite, product: dict | None) -> FavoriteResponse:
     base = FavoriteResponse.model_validate(fav)
     if product:
-        base.product_name = product.get("name")
+        base.product_name = product.get("title") or product.get("name")
         base.current_price = product.get("min_price") or product.get("price")
         base.image_url = product.get("image_url")
         base.in_stock = bool(product.get("in_stock", False))

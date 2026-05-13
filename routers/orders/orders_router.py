@@ -22,7 +22,7 @@ async def create_order(
     db: AsyncSession = Depends(get_db),
 ):
     order = await order_service.create_order(
-        db, buyer.id, payload.address_id,
+        db, buyer.id, payload.idempotency_key, payload.address_id,
         payload.comment, get_b2b_client()
     )
     return order

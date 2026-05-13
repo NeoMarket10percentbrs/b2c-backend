@@ -1,46 +1,55 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
 from core.dependencies import get_current_buyer
 from models.buyer import Buyer
-from schemas.favorite import FavoriteAdd, FavoriteResponse, FavoriteUpdate
+from schemas.favorite import FavoriteListResponse, FavoriteResponse, SubscribeRequest
 from services import favorites_service
 
 favorites_router = APIRouter(prefix="/favorites", tags=["favorites"])
 
 
-@favorites_router.get("", response_model=list[FavoriteResponse])
+@favorites_router.get("", response_model=FavoriteListResponse)
 async def list_favorites(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     buyer: Buyer = Depends(get_current_buyer),
     db: AsyncSession = Depends(get_db),
 ):
-    return await favorites_service.get_favorites(db, buyer.id)
+    return await favorites_service.get_favorites(db, buyer.id, limit, offset)
 
 
-@favorites_router.post("", response_model=FavoriteResponse, status_code=status.HTTP_201_CREATED)
+@favorites_router.post("/{product_id}", response_model=FavoriteResponse)
 async def add_favorite(
-    payload: FavoriteAdd,
+    product_id: UUID,
+    response: Response,
     buyer: Buyer = Depends(get_current_buyer),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db)
+    
 ):
-    return await favorites_service.add_to_favorites(db, buyer.id, payload)
+    favorite, created = await favorites_service.add_to_favorites(
+        db, buyer.id, product_id
+    )
+    response.status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+    return favorite
 
 
-@favorites_router.patch("/{favorite_id}", response_model=FavoriteResponse)
-async def update_favorite(
-    favorite_id: UUID,
-    payload: FavoriteUpdate,
-    buyer: Buyer = Depends(get_current_buyer),
-    db: AsyncSession = Depends(get_db),
-):
-    return await favorites_service.update_favorite(db, buyer.id, favorite_id, payload)
-
-
-@favorites_router.delete("/{favorite_id}", status_code=status.HTTP_204_NO_CONTENT)
+@favorites_router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_favorite(
-    favorite_id: UUID,
+    product_id: UUID,
     buyer: Buyer = Depends(get_current_buyer),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db)
 ):
-    await favorites_service.remove_favorite(db, buyer.id, favorite_id)
+    await favorites_service.remove_favorite(db, buyer.id, product_id)
+
+
+@favorites_router.post("/{product_id}/subscribe", status_code=status.HTTP_201_CREATED)
+async def subscribe_to_product(
+    product_id: UUID,
+    payload: SubscribeRequest,
+    buyer: Buyer = Depends(get_current_buyer),
+    db: AsyncSession = Depends(get_db)
+):
+    await favorites_service.subscribe_to_product(db, buyer.id, product_id, payload)
+    return {"ok": True}

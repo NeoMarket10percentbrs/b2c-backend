@@ -13,7 +13,7 @@ class OrderItem(Base):
 	__tablename__ = "order_items"
 	__table_args__ = (
 		CheckConstraint("quantity > 0", name="ck_order_items_quantity_positive"),
-		CheckConstraint("price >= 0", name="price_non_negative")
+		CheckConstraint("unit_price >= 0", name="unit_price_non_negative")
 	)
 
 	id: Mapped[uuid.UUID] = mapped_column(
@@ -25,13 +25,15 @@ class OrderItem(Base):
 		nullable=False, index=True
 	)
 	product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+	product_title: Mapped[str] = mapped_column(String(255), nullable=False)
 	seller_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False, index=True
     )
 	sku_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 	sku_name: Mapped[str] = mapped_column(String(255), nullable=False)
 	image_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-	price: Mapped[int] = mapped_column(BigInteger, nullable=False)
+	unit_price: Mapped[int] = mapped_column(BigInteger, nullable=False)
+	line_total: Mapped[int] = mapped_column(BigInteger, nullable=False)
 	quantity: Mapped[int] = mapped_column(Integer, nullable=False)
 
 	# Relationships
