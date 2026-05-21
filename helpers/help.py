@@ -53,7 +53,7 @@ def _catalog_card_from_b2b(product: dict) -> CatalogProductCard:
 
     payload = {
         "id": product.get("id"),
-        "name": product.get("name") or product.get("title") or "",
+        "title": product.get("name") or product.get("title") or "",
         "slug": product.get("slug"),
         "category": product.get("category"),
         "min_price": product.get("min_price") or product.get("price") or 0,

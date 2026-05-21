@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from .b2b import B2BClient, B2BNotFoundError
 from models.cart import Cart
-from models.cart_item import CartItem
+from models.cart_item import CartItem as CartItemModel
 from schemas.cart import (
     CartItem, CartResponse, CartValidationIssue, CartValidationResponse
 )
@@ -70,11 +70,11 @@ async def add_item(
             existing.product_id = UUID(sku["product_id"])
     else:
         db.add(
-            CartItem(
+            CartItemModel(
                 cart_id=cart.id,
                 sku_id=sku_id,
                 product_id=UUID(sku["product_id"]),
-                quantity=quantity,
+                quantity=quantity
             )
         )
 

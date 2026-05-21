@@ -114,15 +114,16 @@ class B2BClient:
         return data or []
 
     async def get_sku(self, sku_id: UUID) -> dict:
-        return await self._request("GET", f"/api/public/skus/{sku_id}", headers=self._service_headers)
+        return await self._request("GET", f"/api/v1/public/skus/{sku_id}", headers=self._service_headers)
 
     async def get_products_by_ids(self, product_ids: list[UUID]) -> dict[UUID, dict]:
         if not product_ids:
             return {}
-        ids_param = ",".join(str(pid) for pid in product_ids)
+        payload = {"product_ids": [str(pid) for pid in product_ids]}
         data = await self._request(
-            "GET", "/api/public/products", params={"ids": ids_param}, headers=self._service_headers
+            "POST", "/api/v1/public/products/batch", json=payload, headers=self._service_headers
         )
+        # data – это list[dict] с товарами
         result: dict[UUID, dict] = {}
         for entry in data or []:
             try:
