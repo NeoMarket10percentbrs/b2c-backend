@@ -28,10 +28,12 @@ async def get_favorites(db: AsyncSession, buyer_id: UUID, limit: int, offset: in
         return PaginatedCatalogProducts(
             items=[], total_count=total_count, limit=limit, offset=offset
         )
-
-    products = await get_b2b_client().get_products_by_ids(
-        [f.product_id for f in favorites]
-    )
+    try:
+        products = await get_b2b_client().get_products_by_ids(
+            [f.product_id for f in favorites]
+        )
+    except HTTPException:
+        products = {}
 
     items: list[CatalogProductCard] = []
     for fav in favorites:
