@@ -95,7 +95,7 @@ class B2BClient:
         if category_id:
             params["filter[category_id]"] = str(category_id)
         if search:
-            params["q"] = search
+            params["search"] = search
         if min_price is not None:
             params["filter[price_min]"] = min_price
         if max_price is not None:

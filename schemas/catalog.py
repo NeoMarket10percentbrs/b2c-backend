@@ -37,15 +37,15 @@ class ImageRef(BaseModel):
 
 class CatalogProductCard(BaseModel):
     id: UUID
-    name: str
+    title: str
     slug: str | None = None
-    category: CategoryRef | None = None
-    min_price: int
+    category_id: UUID | None = None
+    min_price: int | None = None
     old_price: int | None = None
-    has_stock: bool
+    # has_stock: bool
     rating: float | None = None
     reviews_count: int = Field(default=0, ge=0)
-    images: list[ImageRef]
+    cover_image: str | None = None
     seller: dict | None = None
 
 
@@ -55,7 +55,7 @@ class CatalogSku(BaseModel):
     sku_code: str | None = None
     price: int
     old_price: int | None = None
-    available_quantity: int = Field(ge=0)
+    active_quantity: int = Field(ge=0)
     attributes: dict | None = None
     images: list[ImageRef] = []
 
