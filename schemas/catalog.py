@@ -7,10 +7,15 @@ class CategoryRef(BaseModel):
     name: str
     parent_id: UUID | None = None
     level: int = Field(ge=0)
-    path: list[str]
+    path: str
 
 
-class CategoryTreeNode(CategoryRef):
+class CategoryTreeNode(BaseModel):
+    id: UUID
+    name: str
+    parent_id: UUID | None = None
+    level: int | None = None
+    path: str | None = None
     children: list["CategoryTreeNode"] = []
 
 

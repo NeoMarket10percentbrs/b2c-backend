@@ -64,7 +64,7 @@ class OrderShortResponse(BaseModel):
 	created_at: datetime
 
 
-class OrderListResponse(BaseModel):
+class PaginatedOrders(BaseModel):
 	items: list[OrderShortResponse]
 	total_count: int
 	limit: int

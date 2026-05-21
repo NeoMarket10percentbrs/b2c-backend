@@ -5,7 +5,7 @@ from core.database import get_db
 from core.dependencies import get_current_buyer
 from models.buyer import Buyer
 from schemas.notification import (
-    NotificationCreate, NotificationListResponse, NotificationResponse
+    NotificationCreate, PaginatedNotifications, NotificationResponse
 )
 from services import notification_service
 
@@ -16,7 +16,7 @@ notification_router = APIRouter(prefix="/notifications", tags=["Notifications"])
 # Покупатель
 
 
-@notification_router.get("", response_model=NotificationListResponse)
+@notification_router.get("", response_model=PaginatedNotifications)
 async def list_notifications(
     unread_only: bool = False,
     limit: int = Query(default=20, ge=1, le=100),
@@ -27,7 +27,7 @@ async def list_notifications(
     total, unread, items = await notification_service.list_notifications(
         db, buyer.id, only_unread=unread_only, limit=limit, offset=offset
     )
-    return NotificationListResponse(
+    return PaginatedNotifications(
         total_count=total, unread_count=unread,
         limit=limit, offset=offset,
         items=[NotificationResponse.model_validate(i) for i in items],

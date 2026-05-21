@@ -16,30 +16,23 @@ load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-	if settings.ENV == "development" or settings.ENV == "production":
-		async with engine.begin() as conn:
-			print("ok")
+    if settings.ENV in ("development", "production"):
+        async with engine.begin() as conn:
+            print("ok")
 
-	app.state.http_client = httpx.AsyncClient(
-		base_url=settings.SELLER_SERVICE_URL,
-		timeout=5.0,
-	)
+    try:
+        init_b2b_client()
+    except Exception as e:
+        print(f"Failed to initialize B2B client: {e}")
+        if settings.ENV == "production":
+            raise
 
-	try:
-		init_b2b_client()
-		yield
-		await close_b2b_client()
-	except Exception as e:
-		print(f"Failed to initialize database: {e}")
-		if settings.ENV == "production":
-			raise
+    print("Application started successfully")
 
-	print("Application started successfully")
+    yield
 
-	yield
-
-	await app.state.http_client.aclose()
-	await engine.dispose()
+    await close_b2b_client()
+    await engine.dispose()
 
 
 app = FastAPI(

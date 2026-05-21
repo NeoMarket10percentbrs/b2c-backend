@@ -25,7 +25,7 @@ class NotificationResponse(BaseModel):
     created_at: datetime
 
 
-class NotificationListResponse(BaseModel):
+class PaginatedNotifications(BaseModel):
     items: list[NotificationResponse]
     total_count: int
     unread_count: int

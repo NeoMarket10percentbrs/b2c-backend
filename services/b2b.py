@@ -5,6 +5,7 @@ import httpx
 from fastapi import HTTPException, status
 from core.config import settings
 
+VALID_SORT_VALUES = {"popularity", "price_asc", "price_desc", "new"}
 
 class B2BClientError(HTTPException):
     pass
@@ -74,41 +75,47 @@ class B2BClient:
         search: str | None = None,
         min_price: int | None = None,
         max_price: int | None = None,
-        seller_id: UUID | None = None,
-        page: int = 1, size: int = 20, sort: str | None = None) -> dict:
-        params: dict[str, Any] = {"page": page, "size": size}
+        limit: int = 20, offset: int = 0,
+        sort: str | None = None,
+    ) -> dict:
+            
+        if sort not in VALID_SORT_VALUES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Недопустимое значение sort '{sort}'. Допустимые: {', '.join(sorted(VALID_SORT_VALUES))}"
+            )
+            
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
         if category_id:
-            params["category_id"] = str(category_id)
+            params["filter[category_id]"] = str(category_id)
         if search:
-            params["search"] = search
+            params["q"] = search
         if min_price is not None:
-            params["min_price"] = min_price
+            params["filter[price_min]"] = min_price
         if max_price is not None:
-            params["max_price"] = max_price
-        if seller_id:
-            params["seller_id"] = str(seller_id)
+            params["filter[price_max]"] = max_price
         if sort:
             params["sort"] = sort
-        return await self._request("GET", "/api/public/products", params=params)
+        return await self._request("GET", "/api/v1/public/products", params=params, headers=self._service_headers)
 
     async def get_product(self, product_id: UUID) -> dict:
-        return await self._request("GET", f"/api/public/products/{product_id}")
+        return await self._request("GET", f"/api/v1/public/products/{product_id}", headers=self._service_headers)
 
     async def get_similar_products(self, product_id: UUID, limit: int = 10) -> list[dict]:
         data = await self._request(
-            "GET", f"/api/public/products/{product_id}/similar", params={"limit": limit}
+            "GET", f"/api/v1/public/products/{product_id}/similar", params={"limit": limit}, headers=self._service_headers
         )
         return data or []
 
     async def get_sku(self, sku_id: UUID) -> dict:
-        return await self._request("GET", f"/api/public/skus/{sku_id}")
+        return await self._request("GET", f"/api/public/skus/{sku_id}", headers=self._service_headers)
 
     async def get_products_by_ids(self, product_ids: list[UUID]) -> dict[UUID, dict]:
         if not product_ids:
             return {}
         ids_param = ",".join(str(pid) for pid in product_ids)
         data = await self._request(
-            "GET", "/api/public/products", params={"ids": ids_param}
+            "GET", "/api/public/products", params={"ids": ids_param}, headers=self._service_headers
         )
         result: dict[UUID, dict] = {}
         for entry in data or []:
@@ -119,25 +126,25 @@ class B2BClient:
         return result
 
     async def get_categories_tree(self) -> list[dict]:
-        data = await self._request("GET", "/api/public/categories/tree")
+        data = await self._request("GET", "/api/v1/categories/tree", headers=self._service_headers)
         return data or []
 
     async def get_categories(self) -> list[dict]:
-        data = await self._request("GET", "/api/public/categories")
+        data = await self._request("GET", "/api/v1/categories", headers=self._service_headers)
         return data or []
 
     async def get_breadcrumbs(self, category_id: UUID) -> list[dict]:
         data = await self._request(
-            "GET", f"/api/public/categories/{category_id}/breadcrumbs"
+            "GET", f"/api/categories/{category_id}/breadcrumbs", headers=self._service_headers
         )
         return data or []
 
     async def get_banners(self) -> list[dict]:
-        data = await self._request("GET", "/api/public/banners")
+        data = await self._request("GET", "/api/public/banners", headers=self._service_headers)
         return data or []
 
     async def get_collections(self) -> list[dict]:
-        data = await self._request("GET", "/api/public/collections")
+        data = await self._request("GET", "/api/collections", headers=self._service_headers)
         return data or []
 
     async def reserve(self, idempotency_key: UUID, items: list[dict[str, Any]]) -> dict:
