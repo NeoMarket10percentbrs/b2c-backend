@@ -84,7 +84,13 @@ class B2BClient:
                 status_code=400,
                 detail=f"Недопустимое значение sort '{sort}'. Допустимые: {', '.join(sorted(VALID_SORT_VALUES))}"
             )
-            
+        
+        if search is not None and len(search.strip()) < 3:
+            raise HTTPException(
+                status_code=400,
+                detail="Поисковый запрос должен содержать не менее 3 символов"
+            )
+                
         params: dict[str, Any] = {"limit": limit, "offset": offset}
         if category_id:
             params["filter[category_id]"] = str(category_id)
