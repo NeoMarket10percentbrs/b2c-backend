@@ -67,3 +67,8 @@ async def get_banners():
 @catalog_router.get("/collections", response_model=list[Collection])
 async def get_collections():
     return await get_b2b_client().get_collections()
+
+
+@catalog_router.get("/categories/{category_id}/breadcrumbs", response_model=list[CategoryRef])
+async def get_breadcrumbs(category_id: UUID):
+    return await get_b2b_client().get_breadcrumbs(category_id)

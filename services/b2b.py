@@ -141,7 +141,7 @@ class B2BClient:
 
     async def get_breadcrumbs(self, category_id: UUID) -> list[dict]:
         data = await self._request(
-            "GET", f"/api/categories/{category_id}/breadcrumbs", headers=self._service_headers
+            "GET", f"/api/v1/categories/{category_id}/breadcrumbs", headers=self._service_headers
         )
         return data or []
 
