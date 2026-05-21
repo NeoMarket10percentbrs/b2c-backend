@@ -99,7 +99,7 @@ async def test_catalog_sort_price_desc(client):
 async def test_catalog_search(client):
     response = await client.get(
         "/api/v1/catalog/products",
-        params={"q": "а"},
+        params={"q": "ааа"},
     )
 
     assert response.status_code == 200
