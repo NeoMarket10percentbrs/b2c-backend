@@ -99,10 +99,24 @@ async def remove_favorite(db: AsyncSession, buyer_id: UUID, product_id: UUID) ->
     await db.commit()
 
 
-async def subscribe_to_product(
-    db: AsyncSession, user_id: UUID, product_id: UUID, data: SubscribeRequest | None
-) -> ProductSubscription:
-    events = data.notify_on if data else ["BACK_IN_STOCK", "PRICE_DROP"]
+async def subscribe_to_product(db: AsyncSession, user_id: UUID, product_id: UUID, data: SubscribeRequest | None) -> ProductSubscription:
+    try:
+        await get_b2b_client().get_product(product_id)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            raise HTTPException(status_code=404, detail="Товар не найден в каталоге")
+        raise
+
+    if data is not None:
+        if data.events is not None and len(data.events) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Список событий не может быть пустым"
+            )
+        events = data.events if data.events else ["BACK_IN_STOCK", "PRICE_DROP"]
+    else:
+        events = ["BACK_IN_STOCK", "PRICE_DROP"]
+
     existing = await db.execute(
         select(ProductSubscription).where(
             ProductSubscription.user_id == user_id,
