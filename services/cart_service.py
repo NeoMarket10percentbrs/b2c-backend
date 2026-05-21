@@ -1,4 +1,4 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,21 +7,13 @@ from .b2b import B2BClient, B2BNotFoundError
 from models.cart import Cart
 from models.cart_item import CartItem
 from schemas.cart import (
-    CartItemResponse, CartResponse,
-    CartValidationIssue, CartValidationResponse,
+    CartItem, CartResponse, CartValidationIssue, CartValidationResponse
 )
 
 
-async def get_or_create_cart(
-    db: AsyncSession,
-    buyer_id: UUID | None,
-    session_id: str | None,
-) -> Cart:
+async def get_or_create_cart(db: AsyncSession, buyer_id: UUID | None, session_id: str | None) -> Cart:
     if buyer_id is None and session_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MISSING_CART_IDENTITY",
-        )
+        session_id = str(uuid4())
 
     filters = []
     if buyer_id is not None:
@@ -92,8 +84,8 @@ async def add_item(
 
 
 async def update_item(
-    db: AsyncSession, buyer_id: UUID | None, session_id: str | None, item_id: UUID,
-    quantity: int, b2b: B2BClient
+    db: AsyncSession, buyer_id: UUID | None, session_id: str | None,
+    sku_id: UUID, quantity: int, b2b: B2BClient
 ) -> Cart:
     if quantity <= 0:
         raise HTTPException(
@@ -102,7 +94,7 @@ async def update_item(
         )
 
     cart = await get_or_create_cart(db, buyer_id, session_id)
-    item = next((i for i in cart.items if i.id == item_id), None)
+    item = next((i for i in cart.items if i.sku_id == sku_id), None)
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -131,10 +123,10 @@ async def update_item(
 
 
 async def remove_item(
-    db: AsyncSession, buyer_id: UUID | None, session_id: str | None, item_id: UUID
+    db: AsyncSession, buyer_id: UUID | None, session_id: str | None, sku_id: UUID
 ) -> Cart:
     cart = await get_or_create_cart(db, buyer_id, session_id)
-    item = next((i for i in cart.items if i.id == item_id), None)
+    item = next((i for i in cart.items if i.sku_id == sku_id), None)
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -169,39 +161,56 @@ async def build_cart_response(cart: Cart, b2b: B2BClient) -> CartResponse:
                 except ValueError:
                     continue
 
-    items_resp: list[CartItemResponse] = []
+    items_resp: list[CartItem] = []
+    subtotal = 0
+    items_count = 0
+    is_valid = True
     for item in cart.items:
+        items_count += item.quantity
         sku = sku_index.get(item.sku_id)
         if sku is None:
             items_resp.append(
-                CartItemResponse(
-                    id=item.id,
+                CartItem(
                     sku_id=item.sku_id,
                     quantity=item.quantity,
                     is_available=False,
                 )
             )
+            is_valid = False
             continue
         stock = int(sku.get("stock_quantity", 0))
+        unit_price = int(sku.get("price") or 0)
+        line_total = unit_price * item.quantity
+        subtotal += line_total
+        if stock < item.quantity:
+            is_valid = False
         items_resp.append(
-            CartItemResponse(
-                id=item.id,
+            CartItem(
                 sku_id=item.sku_id,
                 quantity=item.quantity,
                 product_id=item.product_id,
-                sku_name=sku.get("name"),
-                sku_price=sku.get("price"),
-                image_url=sku.get("image_url"),
-                stock_quantity=stock,
+                name=sku.get("product_title") or sku.get("name"),
+                sku_code=sku.get("sku_code"),
+                unit_price=unit_price,
+                unit_price_at_add=None,
+                line_total=line_total,
+                available_quantity=stock,
                 is_available=stock >= item.quantity,
+                image=None,
             )
         )
 
-    return CartResponse(id=cart.id, items=items_resp)
+    return CartResponse(
+        id=cart.id,
+        items=items_resp,
+        items_count=items_count,
+        subtotal=subtotal,
+        is_valid=is_valid,
+        updated_at=getattr(cart, "updated_at", None),
+    )
 
 
 async def validate_cart(cart: Cart, b2b: B2BClient) -> CartValidationResponse:
-    # валидируем что всё ещё в наличии
     product_ids = [item.product_id for item in cart.items]
     products = await b2b.get_products_by_ids(product_ids) if product_ids else {}
 
@@ -222,8 +231,8 @@ async def validate_cart(cart: Cart, b2b: B2BClient) -> CartValidationResponse:
             issues.append(
                 CartValidationIssue(
                     sku_id=item.sku_id,
-                    reason="not_found",
-                    requested=item.quantity,
+                    type="PRODUCT_DELETED",
+                    message="Товар удален из каталога",
                 )
             )
             continue
@@ -232,29 +241,28 @@ async def validate_cart(cart: Cart, b2b: B2BClient) -> CartValidationResponse:
             issues.append(
                 CartValidationIssue(
                     sku_id=item.sku_id,
-                    reason="out_of_stock",
-                    requested=item.quantity,
-                    available=stock,
+                    type="OUT_OF_STOCK",
+                    message="Товар отсутствует на складе",
+                    old_value=item.quantity,
+                    new_value=stock,
                 )
             )
         elif stock < item.quantity:
             issues.append(
                 CartValidationIssue(
                     sku_id=item.sku_id,
-                    reason="insufficient_stock",
-                    requested=item.quantity,
-                    available=stock,
+                    type="QUANTITY_REDUCED",
+                    message="Доступное количество меньше",
+                    old_value=item.quantity,
+                    new_value=stock,
                 )
             )
 
-    return CartValidationResponse(is_valid=not issues, issues=issues)
+    cart_response = await build_cart_response(cart, b2b)
+    return CartValidationResponse(is_valid=not issues, cart=cart_response, issues=issues)
 
 
-async def merge_guest_cart(
-    db: AsyncSession,
-    buyer_id: UUID,
-    session_id: str,
-) -> None:
+async def merge_guest_cart(db: AsyncSession, buyer_id: UUID, session_id: str) -> None:
     guest_cart_result = await db.execute(
         select(Cart)
         .where(Cart.session_id == session_id)

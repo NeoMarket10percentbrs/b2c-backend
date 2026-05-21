@@ -5,7 +5,7 @@ from starlette import status
 from starlette.exceptions import HTTPException
 from helpers.help import _get_buyer_or_404
 from models import Buyer
-from schemas.buyer import BuyerCreate, BuyerUpdate
+from schemas.buyer import BuyerRegisterRequest, BuyerUpdateRequest
 from core.security import hash_password
 
 
@@ -13,7 +13,7 @@ def normalize_email(email: str) -> str:
 	return email.strip().lower()
 
 
-async def create_buyer(db: AsyncSession, data: BuyerCreate) -> Buyer:
+async def create_buyer(db: AsyncSession, data: BuyerRegisterRequest) -> Buyer:
     existing = await db.execute(
         select(Buyer.id).where(func.lower(Buyer.email) == normalize_email(data.email))
     )
@@ -59,7 +59,7 @@ async def get_buyer_by_email(db: AsyncSession, email: str) -> Buyer | None:
 	return buyer
 
 
-async def update_buyer(db: AsyncSession, buyer_id: UUID, data: BuyerUpdate) -> Buyer:
+async def update_buyer(db: AsyncSession, buyer_id: UUID, data: BuyerUpdateRequest) -> Buyer:
     buyer = await _get_buyer_or_404(db, buyer_id)
     
     for field, value in data.model_dump(exclude_unset=True).items():

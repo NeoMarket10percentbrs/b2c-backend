@@ -1,48 +1,85 @@
 from uuid import UUID
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
-class CategoryShort(BaseModel):
+class CategoryRef(BaseModel):
     id: UUID
     name: str
-    slug: str | None = None
     parent_id: UUID | None = None
+    level: int = Field(ge=0)
+    path: list[str]
 
 
-class CategoryTreeNode(CategoryShort):
+class CategoryTreeNode(CategoryRef):
     children: list["CategoryTreeNode"] = []
 
 
-class BreadcrumbItem(BaseModel):
-    id: UUID
-    name: str
-    slug: str | None = None
-
-
-class SkuShort(BaseModel):
-    id: UUID
-    article: str | None = None
-    price: int
-    stock_quantity: int
-    image_url: str | None = None
+class CatalogFilter(BaseModel):
+    category_id: UUID | None = None
+    price_min: int | None = Field(default=None, ge=0)
+    price_max: int | None = Field(default=None, ge=0)
+    seller_id: UUID | None = None
     attributes: dict | None = None
 
 
-class ProductShort(BaseModel):
+class ImageRef(BaseModel):
+    id: UUID
+    url: str
+    alt: str | None = None
+    ordering: int = Field(ge=0)
+    is_main: bool | None = None
+
+
+class CatalogProductCard(BaseModel):
+    id: UUID
+    name: str
+    slug: str | None = None
+    category: CategoryRef | None = None
+    min_price: int
+    old_price: int | None = None
+    has_stock: bool
+    rating: float | None = None
+    reviews_count: int = Field(default=0, ge=0)
+    images: list[ImageRef]
+    seller: dict | None = None
+
+
+class CatalogSku(BaseModel):
+    id: UUID
+    name: str | None = None
+    sku_code: str | None = None
+    price: int
+    old_price: int | None = None
+    available_quantity: int = Field(ge=0)
+    attributes: dict | None = None
+    images: list[ImageRef] = []
+
+
+class CatalogProductDetail(CatalogProductCard):
+    description: str
+    attributes: dict | None = None
+    skus: list[CatalogSku]
+
+
+class PaginatedCatalogProducts(BaseModel):
+    items: list[CatalogProductCard]
+    total_count: int
+    limit: int
+    offset: int
+
+
+class Banner(BaseModel):
+    id: UUID
+    title: str | None = None
+    image_url: str
+    link: str
+    ordering: int | None = None
+    active_from: str | None = None
+    active_to: str | None = None
+
+
+class Collection(BaseModel):
     id: UUID
     name: str
     description: str | None = None
-    seller_id: UUID
-    category_id: UUID
-    image_url: str | None = None
-    min_price: int | None = None
-
-
-class ProductDetail(ProductShort):
-    images: list[str] = []
-    skus: list[SkuShort] = []
-
-
-class ProductListResponse(BaseModel):
-    total: int
-    items: list[ProductShort]
+    products: list[CatalogProductCard]

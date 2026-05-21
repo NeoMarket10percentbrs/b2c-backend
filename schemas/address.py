@@ -1,38 +1,28 @@
-from pydantic import BaseModel, ConfigDict
-from uuid import UUID
 from datetime import datetime
+from uuid import UUID
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class AddressCreate(BaseModel):
-	label: str | None = None
-	country: str
-	city: str
-	street: str
-	building: str
-	apartment: str | None = None
-	postal_code: str
+class AddressCreateRequest(BaseModel):
+    country: str = Field(max_length=100)
+    region: str | None = Field(default=None, max_length=200)
+    city: str = Field(max_length=200)
+    street: str = Field(max_length=200)
+    building: str = Field(max_length=50)
+    apartment: str | None = Field(default=None, max_length=50)
+    postal_code: str | None = Field(default=None, max_length=20)
+    recipient_name: str | None = Field(default=None, max_length=200)
+    recipient_phone: str | None = Field(default=None, pattern=r"^\+?[0-9]{10,15}$")
+    is_default: bool = False
+    comment: str | None = Field(default=None, max_length=500)
 
 
-class AddressUpdate(BaseModel):
-	label: str | None = None
-	country: str | None = None
-	city: str | None = None
-	street: str | None = None
-	building: str | None = None
-	apartment: str | None = None
-	postal_code: str | None = None
+class AddressUpdateRequest(AddressCreateRequest):
+    pass
 
 
-class AddressResponse(BaseModel):
-	model_config = ConfigDict(from_attributes=True)
+class AddressResponse(AddressCreateRequest):
+    model_config = ConfigDict(from_attributes=True)
 
-	id: UUID
-	label: str | None
-	country: str
-	city: str
-	street: str
-	building: str
-	apartment: str | None
-	postal_code: str
-	is_default: bool
-	created_at: datetime
+    id: UUID
+    created_at: datetime

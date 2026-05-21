@@ -25,12 +25,12 @@ class OrderItem(Base):
 		nullable=False, index=True
 	)
 	product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-	product_title: Mapped[str] = mapped_column(String(255), nullable=False)
+	name: Mapped[str] = mapped_column(String(255), nullable=False)
 	seller_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False, index=True
     )
 	sku_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-	sku_name: Mapped[str] = mapped_column(String(255), nullable=False)
+	sku_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
 	image_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 	unit_price: Mapped[int] = mapped_column(BigInteger, nullable=False)
 	line_total: Mapped[int] = mapped_column(BigInteger, nullable=False)

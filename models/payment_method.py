@@ -1,6 +1,6 @@
 import uuid
 from typing import TYPE_CHECKING
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.database import Base, TimestampMixin
@@ -13,9 +13,7 @@ if TYPE_CHECKING:
 class PaymentMethod(Base, TimestampMixin):
     __tablename__ = "payment_methods"
     __table_args__ = (
-        CheckConstraint("char_length(last4) = 4", name="last4_length"),
-        CheckConstraint("exp_month BETWEEN 1 AND 12", name="exp_month_range"),
-        CheckConstraint("exp_year BETWEEN 2000 AND 2100", name="exp_year_range"),
+        CheckConstraint("char_length(card_last4) = 4", name="last4_length"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -26,10 +24,9 @@ class PaymentMethod(Base, TimestampMixin):
         ForeignKey("buyers.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
-    cardholder_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    last4: Mapped[str] = mapped_column(String(4), nullable=False)
-    exp_month: Mapped[int] = mapped_column(Integer, nullable=False)
-    exp_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)
+    card_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    card_brand: Mapped[str | None] = mapped_column(String(20), nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     buyer: Mapped["Buyer"] = relationship(back_populates="payment_methods")

@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from models.refresh_token import RefreshToken
 from models.buyer import Buyer
 from schemas.auth import TokenResponse
-from schemas.buyer import BuyerCreate
+from schemas.buyer import BuyerRegisterRequest
 from core.security import (
 	verify_password, create_access_token,
 	generate_refresh_token, hash_refresh_token,
@@ -16,7 +16,7 @@ from services.buyer_service import get_buyer_by_email, get_buyer_by_id, create_b
 from services.cart_service import merge_guest_cart
 
 
-async def register(db: AsyncSession, data: BuyerCreate) -> TokenResponse:
+async def register(db: AsyncSession, data: BuyerRegisterRequest) -> TokenResponse:
 	existing = await get_buyer_by_email(db, data.email)
 	if existing:
 		raise HTTPException(
@@ -41,9 +41,7 @@ async def register(db: AsyncSession, data: BuyerCreate) -> TokenResponse:
 	return await _issue_tokens(db, new_buyer)
 
 
-async def login(
-    db: AsyncSession, email: str, password: str, session_id: str | None
-) -> TokenResponse:
+async def login(db: AsyncSession, email: str, password: str, session_id: str | None) -> TokenResponse:
 	buyer = await get_buyer_by_email(db, email)
 	if not buyer:
 		raise HTTPException(

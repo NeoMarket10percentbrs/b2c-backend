@@ -12,3 +12,4 @@ from .banner import Banner
 from .collection import Collection
 from .collection_item import CollectionItem
 from .notification import Notification, NotificationType
+from .b2b_event import B2BEvent

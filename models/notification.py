@@ -15,9 +15,11 @@ if TYPE_CHECKING:
 
 
 class NotificationType(str, enum.Enum):
-    ORDER_STATUS = "ORDER_STATUS"
-    PRODUCT_IN_STOCK = "PRODUCT_IN_STOCK"
-    PRICE_DOWN = "PRICE_DOWN"
+    ORDER_STATUS_CHANGED = "ORDER_STATUS_CHANGED"
+    BACK_IN_STOCK = "BACK_IN_STOCK"
+    PRICE_DROP = "PRICE_DROP"
+    PROMO = "PROMO"
+    SYSTEM = "SYSTEM"
 
 
 class Notification(Base):

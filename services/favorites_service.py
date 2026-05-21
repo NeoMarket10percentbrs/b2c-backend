@@ -5,14 +5,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.favorite import Favorite
 from models.product_subscription import ProductSubscription
-from schemas.favorite import FavoriteListResponse, FavoriteResponse, SubscribeRequest
+from schemas.catalog import PaginatedCatalogProducts, CatalogProductCard
+from schemas.favorite import SubscribeRequest
 from services.b2b import get_b2b_client
-from helpers.help import _enrich_favorite
+from helpers.help import _catalog_card_from_b2b
 
 
-async def get_favorites(
-    db: AsyncSession, buyer_id: UUID, limit: int, offset: int
-) -> FavoriteListResponse:
+async def get_favorites(db: AsyncSession, buyer_id: UUID, limit: int, offset: int) -> PaginatedCatalogProducts:
     total_query = select(func.count(Favorite.id)).where(Favorite.buyer_id == buyer_id)
     total_count = (await db.execute(total_query)).scalar_one()
 
@@ -26,7 +25,7 @@ async def get_favorites(
     favorites = list(result.scalars().all())
 
     if not favorites:
-        return FavoriteListResponse(
+        return PaginatedCatalogProducts(
             items=[], total_count=total_count, limit=limit, offset=offset
         )
 
@@ -34,21 +33,19 @@ async def get_favorites(
         [f.product_id for f in favorites]
     )
 
-    items = []
+    items: list[CatalogProductCard] = []
     for fav in favorites:
         product = products.get(fav.product_id)
         if product is None:
             continue
-        items.append(_enrich_favorite(fav, product))
+        items.append(_catalog_card_from_b2b(product))
 
-    return FavoriteListResponse(
+    return PaginatedCatalogProducts(
         items=items, total_count=total_count, limit=limit, offset=offset
     )
 
 
-async def add_to_favorites(
-    db: AsyncSession, buyer_id: UUID, product_id: UUID
-) -> tuple[FavoriteResponse, bool]:
+async def add_to_favorites(db: AsyncSession, buyer_id: UUID, product_id: UUID) -> None:
     try:
         product = await get_b2b_client().get_product(product_id)
     except HTTPException as exc:
@@ -59,12 +56,12 @@ async def add_to_favorites(
     result = await db.execute(
         select(Favorite).where(
             Favorite.buyer_id == buyer_id,
-            Favorite.product_id == product_id,
+            Favorite.product_id == product_id
         )
     )
     existing = result.scalar_one_or_none()
     if existing:
-        return _enrich_favorite(existing, product), False
+        return None
 
     fav = Favorite(buyer_id=buyer_id, product_id=product_id)
     db.add(fav)
@@ -76,21 +73,20 @@ async def add_to_favorites(
         result = await db.execute(
             select(Favorite).where(
                 Favorite.buyer_id == buyer_id,
-                Favorite.product_id == product_id,
+                Favorite.product_id == product_id
             )
         )
-        existing = result.scalar_one()
-        return _enrich_favorite(existing, product), False
+        return None
 
     await db.refresh(fav)
-    return _enrich_favorite(fav, product), True
+    return None
 
 
 async def remove_favorite(db: AsyncSession, buyer_id: UUID, product_id: UUID) -> None:
     result = await db.execute(
         select(Favorite).where(
             Favorite.buyer_id == buyer_id,
-            Favorite.product_id == product_id,
+            Favorite.product_id == product_id
         )
     )
     fav = result.scalar_one_or_none()
@@ -102,12 +98,13 @@ async def remove_favorite(db: AsyncSession, buyer_id: UUID, product_id: UUID) ->
 
 
 async def subscribe_to_product(
-    db: AsyncSession, user_id: UUID, product_id: UUID, data: SubscribeRequest
+    db: AsyncSession, user_id: UUID, product_id: UUID, data: SubscribeRequest | None
 ) -> ProductSubscription:
+    events = data.notify_on if data else ["BACK_IN_STOCK", "PRICE_DROP"]
     existing = await db.execute(
         select(ProductSubscription).where(
             ProductSubscription.user_id == user_id,
-            ProductSubscription.product_id == product_id,
+            ProductSubscription.product_id == product_id
         )
     )
     if existing.scalar_one_or_none():
@@ -117,9 +114,23 @@ async def subscribe_to_product(
         )
 
     subscription = ProductSubscription(
-        user_id=user_id, product_id=product_id, notify_on=data.notify_on
+        user_id=user_id, product_id=product_id, notify_on=events
     )
     db.add(subscription)
     await db.commit()
     await db.refresh(subscription)
     return subscription
+
+
+async def unsubscribe_from_product(db: AsyncSession, user_id: UUID, product_id: UUID) -> None:
+    result = await db.execute(
+        select(ProductSubscription).where(
+            ProductSubscription.user_id == user_id,
+            ProductSubscription.product_id == product_id
+        )
+    )
+    subscription = result.scalar_one_or_none()
+    if subscription is None:
+        return
+    await db.delete(subscription)
+    await db.commit()

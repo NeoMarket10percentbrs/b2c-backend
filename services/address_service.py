@@ -3,7 +3,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.address import Address
-from schemas.address import AddressCreate, AddressUpdate
+from schemas.address import AddressCreateRequest, AddressUpdateRequest
 from helpers.help import _get_address_or_404, _unset_default_addresses, _get_address_or_404
 
 
@@ -11,7 +11,16 @@ async def get_address(db: AsyncSession, address_id: UUID, buyer_id: UUID) -> Add
     return await _get_address_or_404(db, address_id, buyer_id)
 
 
-async def create_address(db: AsyncSession, buyer_id: UUID, data: AddressCreate) -> Address:
+async def list_addresses(db: AsyncSession, buyer_id: UUID) -> list[Address]:
+    result = await db.execute(
+        select(Address)
+        .where(Address.buyer_id == buyer_id)
+        .order_by(Address.is_default.desc(), Address.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def create_address(db: AsyncSession, buyer_id: UUID, data: AddressCreateRequest) -> Address:
     has_any = (
         await db.execute(
             select(Address.id).where
@@ -33,7 +42,7 @@ async def create_address(db: AsyncSession, buyer_id: UUID, data: AddressCreate) 
     await db.refresh(address)
     return address
 
-async def update_address(db: AsyncSession, address_id: UUID, buyer_id: UUID, data: AddressUpdate) -> Address:
+async def update_address(db: AsyncSession, address_id: UUID, buyer_id: UUID, data: AddressUpdateRequest) -> Address:
     address = await _get_address_or_404(db, address_id, buyer_id)
     
     update_data = data.model_dump(exclude_unset=True)

@@ -4,7 +4,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from models import Address, Buyer, Favorite, PaymentMethod
-from schemas.favorite import FavoriteResponse
+from uuid import uuid4
+from schemas.catalog import CatalogProductCard
 
 
 async def _unset_default_addresses(db: AsyncSession, buyer_id: UUID, except_id: UUID | None = None):
@@ -38,14 +39,32 @@ async def _get_buyer_or_404(db: AsyncSession, buyer_id: UUID) -> Buyer:
     return buyer
 
 
-def _enrich_favorite(fav: Favorite, product: dict | None) -> FavoriteResponse:
-    base = FavoriteResponse.model_validate(fav)
-    if product:
-        base.product_name = product.get("title") or product.get("name")
-        base.current_price = product.get("min_price") or product.get("price")
-        base.image_url = product.get("image_url")
-        base.in_stock = bool(product.get("in_stock", False))
-    return base
+def _catalog_card_from_b2b(product: dict) -> CatalogProductCard:
+    images = product.get("images") or []
+    if not images and product.get("image_url"):
+        images = [
+            {
+                "id": str(uuid4()),
+                "url": product.get("image_url"),
+                "ordering": 0,
+                "is_main": True,
+            }
+        ]
+
+    payload = {
+        "id": product.get("id"),
+        "name": product.get("name") or product.get("title") or "",
+        "slug": product.get("slug"),
+        "category": product.get("category"),
+        "min_price": product.get("min_price") or product.get("price") or 0,
+        "old_price": product.get("old_price") or product.get("price_old"),
+        "has_stock": bool(product.get("has_stock") or product.get("in_stock") or product.get("stock_quantity", 0)),
+        "rating": product.get("rating"),
+        "reviews_count": product.get("reviews_count") or 0,
+        "images": images,
+        "seller": product.get("seller"),
+    }
+    return CatalogProductCard.model_validate(payload)
 
 
 async def _get_method_or_404(db: AsyncSession, method_id: UUID, buyer_id: UUID) -> PaymentMethod:

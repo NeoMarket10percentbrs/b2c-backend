@@ -10,48 +10,39 @@ from schemas.notification import (
 from services import notification_service
 
 
-notification_router = APIRouter(tags=["notifications"])
+notification_router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 
 # Покупатель
 
 
-@notification_router.get("/notifications", response_model=NotificationListResponse)
+@notification_router.get("", response_model=NotificationListResponse)
 async def list_notifications(
-    only_unread: bool = False,
-    page: int = Query(default=1, ge=1),
-    size: int = Query(default=20, ge=1, le=100),
+    unread_only: bool = False,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     buyer: Buyer = Depends(get_current_buyer),
     db: AsyncSession = Depends(get_db),
 ):
     total, unread, items = await notification_service.list_notifications(
-        db, buyer.id, only_unread=only_unread, page=page, size=size
+        db, buyer.id, only_unread=unread_only, limit=limit, offset=offset
     )
     return NotificationListResponse(
-        total=total, unread=unread,
+        total_count=total, unread_count=unread,
+        limit=limit, offset=offset,
         items=[NotificationResponse.model_validate(i) for i in items],
     )
 
 
-@notification_router.post("/notifications/{notification_id}/read", response_model=NotificationResponse)
+@notification_router.post("/{notification_id}/read", status_code=status.HTTP_204_NO_CONTENT)
 async def mark_read(
-    notification_id: UUID,
-    buyer: Buyer = Depends(get_current_buyer),
-    db: AsyncSession = Depends(get_db),
+    notification_id: UUID, buyer: Buyer = Depends(get_current_buyer),
+    db: AsyncSession = Depends(get_db)
 ):
     notif = await notification_service.mark_read(db, buyer.id, notification_id)
     if notif is None:
         raise HTTPException(status_code=404, detail="Уведомление не найдено")
-    return notif
-
-
-@notification_router.post("/notifications/read-all")
-async def mark_all_read(
-    buyer: Buyer = Depends(get_current_buyer),
-    db: AsyncSession = Depends(get_db),
-):
-    count = await notification_service.mark_all_read(db, buyer.id)
-    return {"marked_read": count}
+    return None
 
 
 # Внутренний эндпоинт

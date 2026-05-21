@@ -26,6 +26,8 @@ class NotificationResponse(BaseModel):
 
 
 class NotificationListResponse(BaseModel):
-    total: int
-    unread: int
     items: list[NotificationResponse]
+    total_count: int
+    unread_count: int
+    limit: int
+    offset: int

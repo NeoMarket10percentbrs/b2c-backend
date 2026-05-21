@@ -7,7 +7,7 @@ from models.notification import Notification, NotificationType
 
 async def create_notification(
     db: AsyncSession, buyer_id: UUID, type_: NotificationType,
-    title: str, body: str, payload: dict[str, Any] | None = None,
+    title: str, body: str, payload: dict[str, Any] | None = None
 ) -> Notification:
     notification = Notification(
         buyer_id=buyer_id, type=type_, title=title,
@@ -21,7 +21,7 @@ async def create_notification(
 
 async def list_notifications(
     db: AsyncSession, buyer_id: UUID,
-    *, only_unread: bool, page: int, size: int
+    *, only_unread: bool, limit: int, offset: int
 ):
     base = select(Notification).where(Notification.buyer_id == buyer_id)
     if only_unread:
@@ -36,15 +36,15 @@ async def list_notifications(
         await db.execute(
             select(func.count(Notification.id)).where(
                 Notification.buyer_id == buyer_id,
-                Notification.is_read.is_(False),
+                Notification.is_read.is_(False)
             )
         )
     ).scalar_one()
 
     items_q = (
         base.order_by(Notification.created_at.desc())
-        .limit(size)
-        .offset((page - 1) * size)
+        .limit(limit)
+        .offset(offset)
     )
     items = (await db.execute(items_q)).scalars().all()
     return total, unread, list(items)

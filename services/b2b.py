@@ -75,7 +75,7 @@ class B2BClient:
         min_price: int | None = None,
         max_price: int | None = None,
         seller_id: UUID | None = None,
-        page: int = 1, size: int = 20) -> dict:
+        page: int = 1, size: int = 20, sort: str | None = None) -> dict:
         params: dict[str, Any] = {"page": page, "size": size}
         if category_id:
             params["category_id"] = str(category_id)
@@ -87,6 +87,8 @@ class B2BClient:
             params["max_price"] = max_price
         if seller_id:
             params["seller_id"] = str(seller_id)
+        if sort:
+            params["sort"] = sort
         return await self._request("GET", "/api/public/products", params=params)
 
     async def get_product(self, product_id: UUID) -> dict:
@@ -120,10 +122,22 @@ class B2BClient:
         data = await self._request("GET", "/api/public/categories/tree")
         return data or []
 
+    async def get_categories(self) -> list[dict]:
+        data = await self._request("GET", "/api/public/categories")
+        return data or []
+
     async def get_breadcrumbs(self, category_id: UUID) -> list[dict]:
         data = await self._request(
             "GET", f"/api/public/categories/{category_id}/breadcrumbs"
         )
+        return data or []
+
+    async def get_banners(self) -> list[dict]:
+        data = await self._request("GET", "/api/public/banners")
+        return data or []
+
+    async def get_collections(self) -> list[dict]:
+        data = await self._request("GET", "/api/public/collections")
         return data or []
 
     async def reserve(self, idempotency_key: UUID, items: list[dict[str, Any]]) -> dict:

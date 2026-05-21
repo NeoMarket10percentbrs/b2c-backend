@@ -1,6 +1,7 @@
 import uuid
+import datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Boolean
+from sqlalchemy import String, Boolean, Date
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from core.database import Base, TimestampMixin
@@ -26,8 +27,9 @@ class Buyer(Base, TimestampMixin):
 	)
 	password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 	first_name: Mapped[str] = mapped_column(String(100), nullable=False)
-	last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+	last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
 	phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+	date_of_birth: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
 	avatar_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 	is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 

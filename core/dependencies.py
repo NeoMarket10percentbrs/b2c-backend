@@ -34,7 +34,7 @@ def _extract_bearer_token(authorization: str | None) -> str:
 
 async def get_current_buyer(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db)
 ) -> Buyer:
     token = credentials.credentials
     try:
@@ -71,6 +71,14 @@ async def require_internal_token(
         )
 
 
+async def require_service_key(x_service_key: str = Header(alias="X-Service-Key")):
+    if x_service_key != settings.B2C_SERVICE_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Недействительный сервисный ключ"
+        )
+
+
 async def get_cart_identity(
     authorization: str | None = Header(default=None, alias="Authorization"),
     x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
@@ -91,7 +99,4 @@ async def get_cart_identity(
     if x_session_id:
         return {"buyer_id": None, "session_id": x_session_id}
 
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="MISSING_CART_IDENTITY",
-    )
+    return {"buyer_id": None, "session_id": None}
