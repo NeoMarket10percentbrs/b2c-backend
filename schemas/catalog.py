@@ -8,12 +8,12 @@ class CategoryRef(BaseModel):
     name: str
     parent_id: UUID | None = None
     level: int = Field(ge=0)
-    path: str
+    path: list[str]
 
 
 class SellerRef(BaseModel):
     id: UUID
-    company_name: str
+    display_name: str
 
 
 class CategoryTreeNode(BaseModel):
@@ -62,7 +62,8 @@ class CatalogSku(BaseModel):
     sku_code: str | None = None
     price: int
     old_price: int | None = None
-    active_quantity: int = Field(ge=0)
+    available_quantity: int = Field(ge=0)
+    is_available: bool = True
     attributes: dict | None = None
     images: list[ImageRef] = []
 

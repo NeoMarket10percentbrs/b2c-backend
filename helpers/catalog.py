@@ -12,6 +12,13 @@ def _safe_price(value):
 def _available_quantity(skus: list[dict]) -> int:
     return sum(s.get("active_quantity", 0) for s in skus)
 
+def _normalize_path(raw_path) -> list[str]:
+    if isinstance(raw_path, str):
+        return [x for x in raw_path.split("/") if x]
+    if isinstance(raw_path, list):
+        return raw_path
+    return []
+
 def adapt_product_card(b2b_product: dict) -> CatalogProductCard:
     skus = b2b_product.get("skus", [])
     available_qty = _available_quantity(skus)
@@ -27,7 +34,7 @@ def adapt_product_card(b2b_product: dict) -> CatalogProductCard:
         name=cat.get("name") or "",
         parent_id=cat.get("parent_id"),
         level=cat.get("level", 0),
-        path=cat.get("path", ""),
+        path=_normalize_path(cat.get("path"))
     )
 
     seller = b2b_product.get("seller")
@@ -35,7 +42,7 @@ def adapt_product_card(b2b_product: dict) -> CatalogProductCard:
         seller = {"id": b2b_product.get("seller_id"), "company_name": None}
     seller_ref = SellerRef(
         id=UUID(seller["id"]),
-        company_name=seller.get("company_name") or "",
+        display_name=seller.get("company_name") or "",
     )
 
     images = []
@@ -71,7 +78,20 @@ def adapt_product_detail(b2b_product: dict) -> CatalogProductDetail:
         **base.model_dump(),
         description=b2b_product.get("description") or "",
         characteristics=b2b_product.get("characteristics", []),
-        skus=b2b_product.get("skus", []),
+        skus=[
+            {
+                "id": s["id"],
+                "name": s.get("name"),
+                "sku_code": s.get("sku_code"),
+                "price": int(s.get("price", 0)),
+                "old_price": (int(s.get("price", 0)) + int(s.get("discount", 0))) if int(s.get("discount", 0)) > 0 else None,
+                "available_quantity": int(s.get("active_quantity", 0)),
+                "is_available": int(s.get("active_quantity", 0)) > 0,
+                "attributes": s.get("attributes"),
+                "images": [ImageRef(id=i.get("id"), url=i["url"], alt=i.get("alt"), ordering=i.get("ordering",0), is_main=i.get("ordering")==0) for i in s.get("images", [])],
+            }
+            for s in b2b_product.get("skus", [])
+        ],
         created_at=b2b_product["created_at"],
         updated_at=b2b_product["updated_at"],
     )
@@ -93,3 +113,13 @@ def aggregate_facets(products: list[dict]) -> list[Facet]:
             values=[FacetValue(value=v, count=c) for v, c in values.items()]
         ))
     return facets
+
+
+def adapt_category_ref(cat: dict) -> CategoryRef:
+    return CategoryRef(
+        id=UUID(cat["id"]),
+        name=cat.get("name") or "",
+        parent_id=cat.get("parent_id"),
+        level=cat.get("level", 0),
+        path=_normalize_path(cat.get("path")),
+    )

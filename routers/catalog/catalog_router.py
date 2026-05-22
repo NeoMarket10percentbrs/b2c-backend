@@ -7,7 +7,7 @@ from schemas.catalog import (
     Banner, Collection
 )
 from enum import Enum
-from helpers.catalog import adapt_product_card, adapt_product_detail, aggregate_facets
+from helpers.catalog import adapt_category_ref, adapt_product_card, adapt_product_detail, aggregate_facets
 
 
 class SortEnum(str, Enum):
@@ -88,7 +88,8 @@ async def get_similar(product_id: UUID, limit: int = Query(default=10, ge=1, le=
 
 @catalog_router.get("/categories", response_model=list[CategoryRef])
 async def get_categories():
-    return await get_b2b_client().get_categories()
+    raw = await get_b2b_client().get_categories()
+    return [adapt_category_ref(c) for c in (raw or [])]
 
 
 @catalog_router.get("/categories/tree", response_model=list[CategoryTreeNode])
@@ -108,4 +109,5 @@ async def get_collections():
 
 @catalog_router.get("/categories/{category_id}/breadcrumbs", response_model=list[CategoryRef])
 async def get_breadcrumbs(category_id: UUID):
-    return await get_b2b_client().get_breadcrumbs(category_id)
+    raw = await get_b2b_client().get_breadcrumbs(category_id)
+    return [adapt_category_ref(c) for c in (raw or [])]

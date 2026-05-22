@@ -99,7 +99,7 @@ async def real_sku(client):
     if not skus:
         pytest.skip("У товара нет SKU")
     for sku in skus:
-        if sku.get("active_quantity", 0) > 0:
+        if sku.get("available_quantity", 0) > 0:
             return sku
     pytest.skip("Нет SKU с положительным остатком")
 
@@ -177,7 +177,7 @@ async def test_partial_reserve_failure_returns_409(
     await client.delete("/api/v1/cart")
     _, buyer_id = buyer_token
     sku_id = real_sku["id"]
-    available = real_sku.get("active_quantity", 1)
+    available = real_sku.get("available_quantity", 1)
     await _fill_cart_via_api(client, sku_id, available)
 
     # Резервируем 1 единицу напрямую через B2B‑сервис
