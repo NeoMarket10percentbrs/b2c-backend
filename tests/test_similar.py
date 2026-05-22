@@ -53,7 +53,7 @@ async def test_empty_category_returns_200_empty_list(client, existing_product_id
 
     for item in items:
         assert "id" in item
-        assert "title" in item
+        assert "name" in item
 
 
 async def test_unknown_product_returns_404(client):

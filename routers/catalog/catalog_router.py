@@ -83,7 +83,12 @@ async def get_product(product_id: UUID):
 
 @catalog_router.get("/products/{product_id}/similar", response_model=list[CatalogProductCard])
 async def get_similar(product_id: UUID, limit: int = Query(default=10, ge=1, le=50)):
-    return await get_b2b_client().get_similar_products(product_id, limit=limit)
+    raw_items = await get_b2b_client().get_similar_products(product_id, limit=limit)
+    if not raw_items:
+        return []
+    product_ids = [UUID(item["id"]) for item in raw_items]
+    full_products = await get_b2b_client().get_products_by_ids(product_ids)
+    return [adapt_product_card(full_products[pid]) for pid in product_ids if pid in full_products]
 
 
 @catalog_router.get("/categories", response_model=list[CategoryRef])
