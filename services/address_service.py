@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.address import Address
 from schemas.address import AddressCreateRequest, AddressUpdateRequest
 from helpers.help import _get_address_or_404, _unset_default_addresses, _get_address_or_404
+from services.favorites_service import _error_detail
 
 
 async def get_address(db: AsyncSession, address_id: UUID, buyer_id: UUID) -> Address:
@@ -65,5 +66,5 @@ async def delete_address(db: AsyncSession, address_id: UUID, buyer_id: UUID) -> 
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Адрес используется в существующих заказах и не может быть удалён",
+            detail=_error_detail("ADDRESS_IN_USE", "Адрес используется в существующих заказах и не может быть удалён"),
         ) from exc

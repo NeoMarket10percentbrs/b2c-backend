@@ -1,13 +1,16 @@
 from uuid import UUID
-from fastapi import APIRouter, Query, Request
-from services.b2b import get_b2b_client
+from fastapi import APIRouter, HTTPException, Query, Request
+from services.b2b import _error_detail, get_b2b_client
 from schemas.catalog import (
     PaginatedCatalogProducts, CatalogProductDetail,
     CatalogProductCard, CategoryRef, CategoryTreeNode,
     Banner, Collection
 )
 from enum import Enum
-from helpers.catalog import adapt_category_ref, adapt_product_card, adapt_product_detail, aggregate_facets
+from helpers.catalog import (
+    adapt_category_ref, adapt_category_tree_node,
+    adapt_product_card, adapt_product_detail, aggregate_facets
+)
 
 
 class SortEnum(str, Enum):
@@ -43,6 +46,11 @@ async def list_products(
 ):
     b2b = get_b2b_client()
     filters = _parse_filters(request)
+    if q and filter_category_id:
+        raise HTTPException(
+            status_code=400,
+            detail=_error_detail("INVALID_REQUEST", "Нельзя одновременно использовать поиск (q) и фильтр по категории")
+        )
     data = await b2b.list_products(
         category_id=filter_category_id,
         search=q,
@@ -99,7 +107,8 @@ async def get_categories():
 
 @catalog_router.get("/categories/tree", response_model=list[CategoryTreeNode])
 async def get_categories_tree():
-    return await get_b2b_client().get_categories_tree()
+    raw = await get_b2b_client().get_categories_tree()
+    return [adapt_category_tree_node(node) for node in raw]
 
 
 @catalog_router.get("/banners", response_model=list[Banner])
@@ -114,5 +123,11 @@ async def get_collections():
 
 @catalog_router.get("/categories/{category_id}/breadcrumbs", response_model=list[CategoryRef])
 async def get_breadcrumbs(category_id: UUID):
+    all_categories = await get_b2b_client().get_categories()
+    if not any(cat["id"] == str(category_id) for cat in all_categories):
+        raise HTTPException(
+            status_code=404,
+            detail=_error_detail("CATEGORY_NOT_FOUND", "Категория не найдена")
+        )
     raw = await get_b2b_client().get_breadcrumbs(category_id)
     return [adapt_category_ref(c) for c in (raw or [])]

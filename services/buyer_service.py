@@ -7,6 +7,7 @@ from helpers.help import _get_buyer_or_404
 from models import Buyer
 from schemas.buyer import BuyerRegisterRequest, BuyerUpdateRequest
 from core.security import hash_password
+from services.b2b import _error_detail
 
 
 def normalize_email(email: str) -> str:
@@ -20,7 +21,7 @@ async def create_buyer(db: AsyncSession, data: BuyerRegisterRequest) -> Buyer:
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Покупатель с таким email уже существует"
+            detail=_error_detail("EMAIL_ALREADY_EXISTS", "Покупатель с таким email уже существует")
         )
 
     buyer = Buyer(
@@ -39,7 +40,7 @@ async def create_buyer(db: AsyncSession, data: BuyerRegisterRequest) -> Buyer:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Ошибка при создании: данные уже используются (email или телефон)"
+            detail=_error_detail("DATA_ALREADY_USED", "Ошибка при создании: данные уже используются (email или телефон)")
         )
     
     return buyer

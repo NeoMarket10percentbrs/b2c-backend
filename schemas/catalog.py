@@ -20,8 +20,8 @@ class CategoryTreeNode(BaseModel):
     id: UUID
     name: str
     parent_id: UUID | None = None
-    level: int | None = None
-    path: str | None = None
+    level: int
+    path: list[str] 
     children: list["CategoryTreeNode"] = []
 
 

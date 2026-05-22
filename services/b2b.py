@@ -35,16 +35,9 @@ class B2BClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def _request(
-        self, method: str, path: str, *,
-        params: dict[str, Any] | None = None,
-        json: Any = None,
-        headers: dict[str, str] | None = None,
-    ) -> Any:
+    async def _request(self, method, path, *, params=None, json=None, headers=None) -> Any:
         try:
-            response = await self._client.request(
-                method, path, params=params, json=json, headers=headers
-            )
+            response = await self._client.request(method, path, params=params, json=json, headers=headers)
         except (httpx.TimeoutException, httpx.HTTPError) as exc:
             raise B2BClientError(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -58,18 +51,18 @@ class B2BClient:
             )
         if response.status_code == 409:
             data = _safe_json(response)
-            message = data if isinstance(data, str) else _safe_detail(response, "Conflict in B2B")
             raise B2BConflictError(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=_error_detail("B2B_CONFLICT", str(message)),
+                status_code=409,
+                detail=data if isinstance(data, dict) else {"code": "B2B_CONFLICT", "message": str(data)}
             )
+        if response.status_code == 422:
+            data = _safe_json(response)
+            detail = data if isinstance(data, dict) and "code" in data else _error_detail("B2B_ERROR", _safe_detail(response, "Unprocessable Entity"))
+            raise B2BClientError(status_code=422, detail=detail)
         if response.status_code >= 400:
             raise B2BClientError(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=_error_detail(
-                    "B2B_ERROR",
-                    _safe_detail(response, f"B2B returned {response.status_code}"),
-                ),
+                detail=_error_detail("B2B_ERROR", _safe_detail(response, f"B2B returned {response.status_code}")),
             )
 
         return _safe_json(response)
@@ -195,19 +188,26 @@ class B2BClient:
         return data or []
 
     async def reserve(self, idempotency_key: UUID, order_id: UUID, items: list[dict[str, Any]]) -> dict:
-        data = await self._request(
-            "POST", "/api/v1/inventory/reserve",
-            json={
-                "idempotency_key": str(idempotency_key),
-                "order_id": str(order_id),
-                "items": items,
-            },
-            headers=self._service_headers,
-        )
-        # Успешный ответ B2B: {"response": {"status": "RESERVED", ...}}
-        result = (data or {}).get("response", {})
-        result["reserved"] = True
-        return result
+        try:
+            data = await self._request(
+                "POST", "/api/v1/inventory/reserve",
+                json={
+                    "idempotency_key": str(idempotency_key),
+                    "order_id": str(order_id),
+                    "items": items,
+                },
+                headers=self._service_headers,
+            )
+            result = (data or {}).get("response", {})
+            result["reserved"] = True
+            return result
+        except B2BConflictError as exc:
+            # exc.detail — это исходный JSON от B2B: {"code": "CONFLICT", "message": "...", "details": {"failed_items": [...]}}
+            error_info = exc.detail if isinstance(exc.detail, dict) else {}
+            return {
+                "reserved": False,
+                "failed_items": error_info.get("details", {}).get("failed_items", []),
+            }
 
     async def unreserve(self, order_id: UUID, items: list[dict[str, Any]]) -> Any:
         return await self._request(

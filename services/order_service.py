@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from .b2b import B2BClient, B2BClientError
+from .b2b import B2BClient, B2BClientError, _error_detail
 from models.address import Address
 from models.order import Order, OrderStatus
 from models.payment_method import PaymentMethod
@@ -38,26 +38,29 @@ async def create_order(
             if existing_order.idempotency_body_hash != request_hash:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="IDEMPOTENCY_KEY_CONFLICT",
+                    detail=_error_detail("IDEMPOTENCY_KEY_CONFLICT", "Тело запроса не совпадает с использованным ключом идемпотентности"),
                 )
             return existing_order
 
     cart = await get_or_create_cart(db, buyer_id, None)
     if not cart.items:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Корзина пуста"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_error_detail("CART_EMPTY", "Корзина пуста")
         )
 
     address = await db.get(Address, payload.address_id)
     if address is None or address.buyer_id != buyer_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Адрес не найден"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error_detail("ADDRESS_NOT_FOUND", "Адрес не найден")
         )
 
     payment_method = await db.get(PaymentMethod, payload.payment_method_id)
     if payment_method is None or payment_method.buyer_id != buyer_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Способ оплаты не найден"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error_detail("PAYMENT_METHOD_NOT_FOUND", "Способ оплаты не найден")
         )
 
     validation = await validate_cart(cart, b2b)
@@ -135,13 +138,13 @@ async def create_order(
         if product is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Продукт {cart_item.product_id} не найден"
+                detail=_error_detail("PRODUCT_NOT_FOUND", f"Продукт {cart_item.product_id} не найден")
             )
         sku = sku_index.get(cart_item.sku_id)
         if sku is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"SKU {cart_item.sku_id} стал недоступен",
+                detail=_error_detail("SKU_UNAVAILABLE", f"SKU {cart_item.sku_id} стал недоступен")
             )
         price = int(sku["price"])
         line_total = price * cart_item.quantity
@@ -171,8 +174,9 @@ async def create_order(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
+                "code": "INSUFFICIENT_STOCK",
                 "message": "Часть товаров недоступна",
-                "failed_items": reserve_result.get("failed_items", []),
+                "details": {"failed_items": reserve_result.get("failed_items", [])},
             },
         )
 
@@ -235,7 +239,8 @@ async def cancel_order(db: AsyncSession, buyer_id: UUID, order_id: UUID, payload
     order = result.scalar_one_or_none()
     if order is None or order.buyer_id != buyer_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error_detail("ORDER_NOT_FOUND", "Заказ не найден")
         )
 
     if order.status == OrderStatus.CANCELLED:
@@ -245,7 +250,7 @@ async def cancel_order(db: AsyncSession, buyer_id: UUID, order_id: UUID, payload
     if order.status in (OrderStatus.ASSEMBLING, OrderStatus.DELIVERING, OrderStatus.DELIVERED):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="CANCEL_NOT_ALLOWED",
+            detail=_error_detail("CANCEL_NOT_ALLOWED", "Отмена заказа в текущем статусе невозможна")
         )
 
     unreserve_payload = [
@@ -279,7 +284,7 @@ async def list_orders(db: AsyncSession, buyer_id: UUID, limit: int, offset: int,
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="INVALID_STATUS",
+                detail=_error_detail("INVALID_STATUS", "Недопустимый статус заказа")
             )
         total_q = total_q.where(Order.status == status_value)
     total = (await db.execute(total_q)).scalar_one()
@@ -316,6 +321,7 @@ async def get_order(db: AsyncSession, buyer_id: UUID, order_id: UUID) -> Order:
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error_detail("ORDER_NOT_FOUND", "Заказ не найден")
         )
     return order

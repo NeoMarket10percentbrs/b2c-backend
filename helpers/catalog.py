@@ -1,6 +1,6 @@
 from uuid import UUID, uuid4
 from schemas.catalog import (
-    CatalogProductCard, CatalogProductDetail,
+    CatalogProductCard, CatalogProductDetail, CategoryTreeNode,
     ImageRef, CategoryRef, SellerRef
 )
 from collections import defaultdict
@@ -122,4 +122,15 @@ def adapt_category_ref(cat: dict) -> CategoryRef:
         parent_id=cat.get("parent_id"),
         level=cat.get("level", 0),
         path=_normalize_path(cat.get("path")),
+    )
+
+
+def adapt_category_tree_node(raw: dict) -> CategoryTreeNode:
+    return CategoryTreeNode(
+        id=UUID(raw["id"]),
+        name=raw.get("name") or "",
+        parent_id=raw.get("parent_id"),
+        level=raw.get("level") or 0,
+        path=_normalize_path(raw.get("path")),
+        children=[adapt_category_tree_node(child) for child in raw.get("children", [])]
     )

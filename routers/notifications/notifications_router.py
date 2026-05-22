@@ -8,6 +8,7 @@ from schemas.notification import (
     NotificationCreate, PaginatedNotifications, NotificationResponse
 )
 from services import notification_service
+from services.favorites_service import _error_detail
 
 
 notification_router = APIRouter(prefix="/notifications", tags=["Notifications"])
@@ -41,7 +42,10 @@ async def mark_read(
 ):
     notif = await notification_service.mark_read(db, buyer.id, notification_id)
     if notif is None:
-        raise HTTPException(status_code=404, detail="Уведомление не найдено")
+        raise HTTPException(
+            status_code=404,
+            detail=_error_detail("NOTIFICATION_NOT_FOUND", "Уведомление не найдено")
+        )
     return None
 
 

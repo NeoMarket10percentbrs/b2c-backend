@@ -3,6 +3,7 @@ from uuid import uuid4
 from httpx import AsyncClient, ASGITransport
 from main import app
 from asgi_lifespan import LifespanManager
+from fastapi import HTTPException
 
 
 @pytest.fixture(scope="module")
@@ -51,8 +52,7 @@ async def test_breadcrumbs_return_path_from_root(client):
         pytest.skip("Нет листовых категорий")
 
     response = await client.get(f"/api/v1/catalog/categories/{leaf['id']}/breadcrumbs")
-    if response.status_code in (404, 502):
-        pytest.skip("Breadcrumbs не реализованы в B2B")
+    assert response.status_code == 200, f"Unexpected status {response.status_code}"
 
     assert response.status_code == 200
     crumbs = response.json()
@@ -63,23 +63,46 @@ async def test_breadcrumbs_return_path_from_root(client):
         assert crumbs[i].get("parent_id") == crumbs[i - 1]["id"]
 
 
+async def test_breadcrumbs_unknown_category_returns_404(client):
+    fake_id = uuid4()
+    resp = await client.get(f"/api/v1/catalog/categories/{fake_id}/breadcrumbs")
+    assert resp.status_code == 404
+    data = resp.json()
+    assert data["code"] == "CATEGORY_NOT_FOUND"
+    assert "message" in data
+
 async def test_ambiguous_params_returns_400(client):
     response = await client.get(
         "/api/v1/catalog/products",
-        params={"q": "а", "filter[category_id]": str(uuid4())},
+        params={"q": "телефон", "filter[category_id]": str(uuid4())},
     )
     assert response.status_code == 400
     data = response.json()
     assert data["code"] == "INVALID_REQUEST"
     assert "message" in data
 
+async def test_orphan_category_returns_422(client, monkeypatch):
+    from services.b2b import B2BClient
 
-async def test_orphan_node_returns_422(client):
-    response = await client.get(
-        "/api/v1/catalog/products",
-        params={"filter[category_id]": "not-a-valid-uuid"},
-    )
-    assert response.status_code == 422
-    data = response.json()
-    assert data["code"] == "VALIDATION_ERROR"
+    fake_id = uuid4()
+
+    # Мок: категория существует
+    async def mock_get_categories(*args, **kwargs):
+        return [{"id": str(fake_id), "name": "Test", "parent_id": None, "level": 0, "path": []}]
+
+    monkeypatch.setattr(B2BClient, "get_categories", mock_get_categories)
+
+    # Мок: get_breadcrumbs для этой категории возвращает 422
+    async def mock_get_breadcrumbs(*args, **kwargs):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "ORPHAN_CATEGORY", "message": "Родительская категория не найдена"}
+        )
+
+    monkeypatch.setattr(B2BClient, "get_breadcrumbs", mock_get_breadcrumbs)
+
+    resp = await client.get(f"/api/v1/catalog/categories/{fake_id}/breadcrumbs")
+    assert resp.status_code == 422
+    data = resp.json()
+    assert data["code"] == "ORPHAN_CATEGORY"
     assert "message" in data
