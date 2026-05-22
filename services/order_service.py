@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 import hashlib
 import json
-from uuid import UUID
+from uuid import UUID, uuid4
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +25,11 @@ async def create_order(
         select(Order)
         .where(Order.idempotency_key == idempotency_key)
         .order_by(Order.created_at.desc())
-        .options(selectinload(Order.items), selectinload(Order.address))
+        .options(
+            selectinload(Order.items),
+            selectinload(Order.address),
+            selectinload(Order.payment_method)   # ← добавить
+        )
     )
     existing_order = existing.scalars().first()
     if existing_order:
@@ -65,6 +69,7 @@ async def create_order(
 
     product_ids = [item.product_id for item in cart.items]
     products = await b2b.get_products_by_ids(product_ids)
+    products_by_id = products
     sku_index: dict[UUID, dict] = {}
     for product in products.values():
         for sku in product.get("skus", []) or []:
@@ -126,6 +131,12 @@ async def create_order(
     reserve_payload: list[dict] = []
     order_items: list[OrderItem] = []
     for cart_item in cart.items:
+        product = products_by_id.get(cart_item.product_id)
+        if product is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Продукт {cart_item.product_id} не найден"
+            )
         sku = sku_index.get(cart_item.sku_id)
         if sku is None:
             raise HTTPException(
@@ -141,7 +152,7 @@ async def create_order(
                 sku_id=cart_item.sku_id,
                 product_id=UUID(sku["product_id"]),
                 name=sku.get("product_title") or sku.get("name", ""),
-                seller_id=UUID(sku["seller_id"]),
+                seller_id=UUID(product["seller_id"]),
                 sku_code=sku.get("sku_code"),
                 image_url=sku.get("image_url"),
                 unit_price=price,
@@ -153,7 +164,9 @@ async def create_order(
             {"sku_id": str(cart_item.sku_id), "quantity": cart_item.quantity}
         )
 
-    reserve_result = await b2b.reserve(idempotency_key, reserve_payload)
+    # Генерируем order_id заранее
+    order_id = uuid4()
+    reserve_result = await b2b.reserve(idempotency_key, order_id, reserve_payload)
     if not reserve_result.get("reserved", False):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -165,6 +178,7 @@ async def create_order(
 
     delivery_cost = 0
     order = Order(
+        id=order_id,
         idempotency_key=idempotency_key,
         idempotency_body_hash=request_hash,
         buyer_id=buyer_id,

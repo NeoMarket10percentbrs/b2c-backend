@@ -45,15 +45,10 @@ class B2BClient:
             response = await self._client.request(
                 method, path, params=params, json=json, headers=headers
             )
-        except httpx.TimeoutException as exc:
+        except (httpx.TimeoutException, httpx.HTTPError) as exc:
             raise B2BClientError(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail=_error_detail("B2B_TIMEOUT", f"B2B service did not respond in time: {exc}"),
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise B2BClientError(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=_error_detail("B2B_UNAVAILABLE", f"Failed to reach B2B service: {exc}"),
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_error_detail("SERVICE_UNAVAILABLE", f"B2B unreachable: {exc}"),
             ) from exc
 
         if response.status_code == 404:
@@ -169,25 +164,31 @@ class B2BClient:
         data = await self._request("GET", "/api/collections", headers=self._service_headers)
         return data or []
 
-    async def reserve(self, idempotency_key: UUID, items: list[dict[str, Any]]) -> dict:
-        """items: [{sku_id: str, quantity: int}, ...]"""
+    async def reserve(self, idempotency_key: UUID, order_id: UUID, items: list[dict[str, Any]]) -> dict:
         data = await self._request(
-            "POST", "/api/v1/reserve",
-            json={"idempotency_key": str(idempotency_key), "items": items},
+            "POST", "/api/v1/inventory/reserve",
+            json={
+                "idempotency_key": str(idempotency_key),
+                "order_id": str(order_id),
+                "items": items,
+            },
             headers=self._service_headers,
         )
-        return data or {"reserved": True, "items": []}
+        # Успешный ответ B2B: {"response": {"status": "RESERVED", ...}}
+        result = (data or {}).get("response", {})
+        result["reserved"] = True
+        return result
 
     async def unreserve(self, order_id: UUID, items: list[dict[str, Any]]) -> Any:
         return await self._request(
-            "POST", "/api/v1/unreserve",
+            "POST", "/api/v1/inventory/unreserve",
             json={"order_id": str(order_id), "items": items},
             headers=self._service_headers,
         )
 
     async def fulfill(self, order_id: UUID, items: list[dict[str, Any]]) -> Any:
         return await self._request(
-            "POST", "/api/v1/fulfill",
+            "POST", "/api/v1/inventory/fulfill",
             json={"order_id": str(order_id), "items": items},
             headers=self._service_headers,
         )

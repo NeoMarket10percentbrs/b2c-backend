@@ -202,10 +202,8 @@ async def test_catalog_invalid_uuid(client):
     assert "message" in data
 
 
-async def test_b2b_unavailable_returns_502(client):
+async def test_b2b_unavailable_returns_503(client):
     from services import b2b as b2b_module
-
-    original_request = b2b_module._b2b_client._client.request
 
     async def raise_connection_error(*args, **kwargs):
         raise httpx.ConnectError("B2B недоступен")
@@ -213,9 +211,9 @@ async def test_b2b_unavailable_returns_502(client):
     with patch.object(b2b_module._b2b_client._client, "request", raise_connection_error):
         response = await client.get("/api/v1/catalog/products")
 
-    assert response.status_code in (502, 503, 504)
+    assert response.status_code == 503
     data = response.json()
-    assert data["code"] == "B2B_UNAVAILABLE"
+    assert data["code"] == "SERVICE_UNAVAILABLE"
     assert "message" in data
 
 
