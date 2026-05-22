@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, Field
 
@@ -8,6 +9,11 @@ class CategoryRef(BaseModel):
     parent_id: UUID | None = None
     level: int = Field(ge=0)
     path: str
+
+
+class SellerRef(BaseModel):
+    id: UUID
+    company_name: str
 
 
 class CategoryTreeNode(BaseModel):
@@ -28,25 +34,26 @@ class CatalogFilter(BaseModel):
 
 
 class ImageRef(BaseModel):
-    id: UUID
+    id: UUID | None = None
     url: str
     alt: str | None = None
     ordering: int = Field(ge=0)
-    is_main: bool | None = None
+    is_main: bool = False
 
 
 class CatalogProductCard(BaseModel):
     id: UUID
-    title: str
-    slug: str | None = None
-    category_id: UUID | None = None
-    min_price: int | None = None
+    name: str
+    slug: str
+    min_price: int
     old_price: int | None = None
-    # has_stock: bool
+    has_stock: bool
+    available_quantity: int
     rating: float | None = None
-    reviews_count: int = Field(default=0, ge=0)
-    cover_image: str | None = None
-    seller: dict | None = None
+    reviews_count: int = Field(ge=0, default=0)
+    category: CategoryRef
+    images: list[ImageRef]
+    seller: SellerRef
 
 
 class CatalogSku(BaseModel):
@@ -62,8 +69,10 @@ class CatalogSku(BaseModel):
 
 class CatalogProductDetail(CatalogProductCard):
     description: str
-    attributes: dict | None = None
-    skus: list[CatalogSku]
+    characteristics: list[dict] = []  # пока оставим, но можно заменить на характеристики
+    skus: list[dict]                 # SKU без себестоимости
+    created_at: datetime
+    updated_at: datetime
 
 
 class PaginatedCatalogProducts(BaseModel):
@@ -71,6 +80,16 @@ class PaginatedCatalogProducts(BaseModel):
     total_count: int
     limit: int
     offset: int
+    facets: list["Facet"] = []  
+
+
+class FacetValue(BaseModel):
+    value: str
+    count: int
+
+class Facet(BaseModel):
+    name: str
+    values: list[FacetValue]
 
 
 class Banner(BaseModel):

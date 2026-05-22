@@ -79,6 +79,8 @@ class B2BClient:
         search: str | None = None,
         min_price: int | None = None,
         max_price: int | None = None,
+        seller_id: UUID | None = None,
+        filters: dict[str, list[str]] | None = None,
         limit: int = 20, offset: int = 0,
         sort: str | None = None,
     ) -> dict:
@@ -104,6 +106,8 @@ class B2BClient:
         params: dict[str, Any] = {"limit": limit, "offset": offset}
         if category_id:
             params["filter[category_id]"] = str(category_id)
+        if seller_id:
+            params["filter[seller_id]"] = str(seller_id)
         if search:
             params["search"] = search
         if min_price is not None:
@@ -112,7 +116,33 @@ class B2BClient:
             params["filter[price_max]"] = max_price
         if sort:
             params["sort"] = sort
+        if filters:
+            params.update({f"filters[{key}]": value for key, values in filters.items() for value in values})
+
         return await self._request("GET", "/api/v1/public/products", params=params, headers=self._service_headers)
+
+    async def get_product_facets(
+        self, *, category_id: UUID | None = None,
+        search: str | None = None, min_price: int | None = None,
+        max_price: int | None = None, seller_id: UUID | None = None,
+        filters: dict[str, list[str]] | None = None
+    ) -> list[dict]:
+        params: dict[str, Any] = {}
+        if category_id:
+            params["category_id"] = str(category_id)
+        if search:
+            params["search"] = search
+        if min_price is not None:
+            params["min_price"] = min_price
+        if max_price is not None:
+            params["max_price"] = max_price
+        if seller_id:
+            params["seller_id"] = str(seller_id)
+        if filters:
+            params.update({f"filters[{key}]": value for key, values in filters.items() for value in values})
+
+        data = await self._request("GET", "/api/v1/public/products/facets", params=params, headers=self._service_headers)
+        return data or []
 
     async def get_product(self, product_id: UUID) -> dict:
         return await self._request("GET", f"/api/v1/public/products/{product_id}", headers=self._service_headers)
