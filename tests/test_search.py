@@ -31,7 +31,9 @@ async def test_short_query_returns_400(client):
             params={"q": short_q},
         )
         assert response.status_code == 400, f"Ожидался 400 для q='{short_q}'"
-        assert "detail" in response.json()
+        data = response.json()
+        assert data["code"] == "INVALID_REQUEST"
+        assert "message" in data
 
 
 async def test_special_chars_do_not_break_query(client):
@@ -43,10 +45,13 @@ async def test_special_chars_do_not_break_query(client):
         assert response.status_code in (200, 400), (
             f"Неожиданный статус {response.status_code} для q='{special_q}'"
         )
+        data = response.json()
         if response.status_code == 200:
-            data = response.json()
             assert "items" in data
             assert isinstance(data["items"], list)
+        else:
+            assert data["code"] == "INVALID_REQUEST"
+            assert "message" in data
 
 
 async def test_empty_results_returns_200(client):

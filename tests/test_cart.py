@@ -181,3 +181,14 @@ async def test_guest_cart_merged_on_login(client, real_sku):
         (i["quantity"] for i in merged_items if i["sku_id"] == sku_id), None
     )
     assert merged_qty == 5, f"Ожидалось 5 (MAX), получено {merged_qty}"
+
+
+async def test_update_missing_cart_item_returns_404(client):
+    response = await client.patch(
+        f"/api/v1/cart/items/{uuid4()}",
+        json={"quantity": 1},
+    )
+    assert response.status_code == 404
+    data = response.json()
+    assert data["code"] == "CART_ITEM_NOT_FOUND"
+    assert "message" in data

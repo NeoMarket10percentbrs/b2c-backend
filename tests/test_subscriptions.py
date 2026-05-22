@@ -63,7 +63,9 @@ async def test_duplicate_subscription_returns_409(client, auth_token, existing_p
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 409
-    assert "detail" in response.json()
+    data = response.json()
+    assert data["code"] == "SUBSCRIPTION_EXISTS"
+    assert "message" in data
 
 
 async def test_invalid_notify_on_returns_400(client, auth_token, existing_product_id):
@@ -75,6 +77,18 @@ async def test_invalid_notify_on_returns_400(client, auth_token, existing_produc
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code in (400, 404, 422)
+    if response.status_code == 400:
+        data = response.json()
+        assert data["code"] == "INVALID_REQUEST"
+        assert "message" in data
+    elif response.status_code == 404:
+        data = response.json()
+        assert data["code"] == "PRODUCT_NOT_FOUND"
+        assert "message" in data
+    else:
+        data = response.json()
+        assert data["code"] == "VALIDATION_ERROR"
+        assert "message" in data
 
 
 async def test_subscribe_to_unknown_product_returns_404(client, auth_token):
@@ -87,3 +101,7 @@ async def test_subscribe_to_unknown_product_returns_404(client, auth_token):
     )
 
     assert response.status_code in (204, 404)
+    if response.status_code == 404:
+        data = response.json()
+        assert data["code"] == "PRODUCT_NOT_FOUND"
+        assert "message" in data

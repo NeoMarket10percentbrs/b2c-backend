@@ -69,7 +69,9 @@ async def test_ambiguous_params_returns_400(client):
         params={"q": "а", "filter[category_id]": str(uuid4())},
     )
     assert response.status_code == 400
-    assert "detail" in response.json()
+    data = response.json()
+    assert data["code"] == "INVALID_REQUEST"
+    assert "message" in data
 
 
 async def test_orphan_node_returns_422(client):
@@ -79,4 +81,5 @@ async def test_orphan_node_returns_422(client):
     )
     assert response.status_code == 422
     data = response.json()
-    assert "detail" in data
+    assert data["code"] == "VALIDATION_ERROR"
+    assert "message" in data

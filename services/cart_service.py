@@ -11,6 +11,10 @@ from schemas.cart import (
 )
 
 
+def _error_detail(code: str, message: str) -> dict:
+    return {"code": code, "message": message}
+
+
 async def get_or_create_cart(db: AsyncSession, buyer_id: UUID | None, session_id: str | None) -> Cart:
     if buyer_id is None and session_id is None:
         session_id = str(uuid4())
@@ -42,14 +46,15 @@ async def add_item(
     if quantity <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Количество должно быть больше нуля",
+            detail=_error_detail("INVALID_REQUEST", "Quantity must be greater than zero"),
         )
 
     try:
         sku = await b2b.get_sku(sku_id)
     except B2BNotFoundError:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="SKU не найден"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error_detail("SKU_NOT_FOUND", "SKU not found"),
         )
 
     cart = await get_or_create_cart(db, buyer_id, session_id)
@@ -61,7 +66,10 @@ async def add_item(
     if stock < new_qty:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Недостаточно товара. Доступно: {stock}",
+            detail=_error_detail(
+                "OUT_OF_STOCK",
+                f"Insufficient stock. Available: {stock}",
+            ),
         )
 
     if existing:
@@ -90,7 +98,7 @@ async def update_item(
     if quantity <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Количество должно быть больше нуля",
+            detail=_error_detail("INVALID_REQUEST", "Quantity must be greater than zero"),
         )
 
     cart = await get_or_create_cart(db, buyer_id, session_id)
@@ -98,7 +106,7 @@ async def update_item(
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Позиция корзины не найдена",
+            detail=_error_detail("CART_ITEM_NOT_FOUND", "Cart item not found"),
         )
 
     try:
@@ -106,14 +114,17 @@ async def update_item(
     except B2BNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="SKU больше не доступен в каталоге",
+            detail=_error_detail("SKU_UNAVAILABLE", "SKU is no longer available in catalog"),
         )
 
     stock = int(sku.get("stock_quantity") or 0)
     if stock < quantity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Недостаточно товара. Доступно: {stock}",
+            detail=_error_detail(
+                "OUT_OF_STOCK",
+                f"Insufficient stock. Available: {stock}",
+            ),
         )
 
     item.quantity = quantity
@@ -130,7 +141,7 @@ async def remove_item(
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Позиция корзины не найдена",
+            detail=_error_detail("CART_ITEM_NOT_FOUND", "Cart item not found"),
         )
     await db.delete(item)
     await db.commit()
@@ -232,7 +243,7 @@ async def validate_cart(cart: Cart, b2b: B2BClient) -> CartValidationResponse:
                 CartValidationIssue(
                     sku_id=item.sku_id,
                     type="PRODUCT_DELETED",
-                    message="Товар удален из каталога",
+                    message="Product was removed from catalog",
                 )
             )
             continue
@@ -242,7 +253,7 @@ async def validate_cart(cart: Cart, b2b: B2BClient) -> CartValidationResponse:
                 CartValidationIssue(
                     sku_id=item.sku_id,
                     type="OUT_OF_STOCK",
-                    message="Товар отсутствует на складе",
+                    message="Product is out of stock",
                     old_value=item.quantity,
                     new_value=stock,
                 )
@@ -252,7 +263,7 @@ async def validate_cart(cart: Cart, b2b: B2BClient) -> CartValidationResponse:
                 CartValidationIssue(
                     sku_id=item.sku_id,
                     type="QUANTITY_REDUCED",
-                    message="Доступное количество меньше",
+                    message="Available quantity is lower",
                     old_value=item.quantity,
                     new_value=stock,
                 )

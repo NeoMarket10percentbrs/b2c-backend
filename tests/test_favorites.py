@@ -132,3 +132,16 @@ async def test_user_id_from_query_is_ignored(client, auth_buyer):
     assert "items" in data
     assert "total_count" in data
     assert isinstance(data["items"], list)
+
+
+async def test_favorites_invalid_limit_returns_422(client, auth_buyer):
+    _, token = auth_buyer
+    response = await client.get(
+        "/api/v1/favorites",
+        params={"limit": 0},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+    data = response.json()
+    assert data["code"] == "VALIDATION_ERROR"
+    assert "message" in data

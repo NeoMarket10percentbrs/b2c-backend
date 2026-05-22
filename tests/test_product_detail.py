@@ -68,4 +68,6 @@ async def test_blocked_product_returns_404(client):
     response = await client.get(f"/api/v1/catalog/products/{fake_id}")
 
     assert response.status_code == 404
-    assert "detail" in response.json()
+    data = response.json()
+    assert "code" in data
+    assert "message" in data

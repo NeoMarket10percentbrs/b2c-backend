@@ -1,10 +1,13 @@
 import os
 from contextlib import asynccontextmanager
 from fastapi.staticfiles import StaticFiles
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from starlette.exceptions import HTTPException as StarletteHTTPException
 import httpx
 from core.database import engine, Base
 from core.config import settings
@@ -40,6 +43,46 @@ app = FastAPI(
 	lifespan=lifespan,
 	debug=settings.DEBUG,
 )
+
+
+def _error_payload(code: str, message: str) -> dict:
+    return {"code": code, "message": message}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if isinstance(exc.detail, dict) and "code" in exc.detail and "message" in exc.detail:
+        return JSONResponse(status_code=exc.status_code, content=exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=_error_payload("HTTP_ERROR", str(exc.detail)),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    message = "Validation error"
+    if errors:
+        first = errors[0]
+        field = first.get("loc", [])
+        msg = first.get("msg", "")
+        if field:
+            message = f"Field '{'.'.join(map(str, field))}' {msg}"
+        elif msg:
+            message = msg
+    return JSONResponse(
+        status_code=422,
+        content=_error_payload("VALIDATION_ERROR", message),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content=_error_payload("INTERNAL_ERROR", "Internal server error"),
+    )
 
 app.add_middleware(
     CORSMiddleware,

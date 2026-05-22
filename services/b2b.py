@@ -7,6 +7,10 @@ from core.config import settings
 
 VALID_SORT_VALUES = {"popularity", "price_asc", "price_desc", "new"}
 
+
+def _error_detail(code: str, message: str) -> dict:
+    return {"code": code, "message": message}
+
 class B2BClientError(HTTPException):
     pass
 
@@ -44,28 +48,33 @@ class B2BClient:
         except httpx.TimeoutException as exc:
             raise B2BClientError(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail=f"B2B сервис не ответил вовремя: {exc}",
+                detail=_error_detail("B2B_TIMEOUT", f"B2B service did not respond in time: {exc}"),
             ) from exc
         except httpx.HTTPError as exc:
             raise B2BClientError(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Ошибка связи с B2B сервисом: {exc}",
+                detail=_error_detail("B2B_UNAVAILABLE", f"Failed to reach B2B service: {exc}"),
             ) from exc
 
         if response.status_code == 404:
             raise B2BNotFoundError(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Ресурс не найден в B2B"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=_error_detail("B2B_NOT_FOUND", "Resource not found in B2B"),
             )
         if response.status_code == 409:
             data = _safe_json(response)
+            message = data if isinstance(data, str) else _safe_detail(response, "Conflict in B2B")
             raise B2BConflictError(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=data if isinstance(data, dict) else _safe_detail(response, "Конфликт в B2B"),
+                detail=_error_detail("B2B_CONFLICT", str(message)),
             )
         if response.status_code >= 400:
             raise B2BClientError(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=_safe_detail(response, f"B2B вернул {response.status_code}"),
+                detail=_error_detail(
+                    "B2B_ERROR",
+                    _safe_detail(response, f"B2B returned {response.status_code}"),
+                ),
             )
 
         return _safe_json(response)
@@ -82,13 +91,19 @@ class B2BClient:
         if sort not in VALID_SORT_VALUES:
             raise HTTPException(
                 status_code=400,
-                detail=f"Недопустимое значение sort '{sort}'. Допустимые: {', '.join(sorted(VALID_SORT_VALUES))}"
+                detail=_error_detail(
+                    "INVALID_REQUEST",
+                    f"Invalid sort value '{sort}'. Allowed: {', '.join(sorted(VALID_SORT_VALUES))}",
+                ),
             )
         
         if search is not None and len(search.strip()) < 3:
             raise HTTPException(
                 status_code=400,
-                detail="Поисковый запрос должен содержать не менее 3 символов"
+                detail=_error_detail(
+                    "INVALID_REQUEST",
+                    "Search query must be at least 3 characters",
+                ),
             )
                 
         params: dict[str, Any] = {"limit": limit, "offset": offset}

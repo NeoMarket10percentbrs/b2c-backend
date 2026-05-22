@@ -147,7 +147,9 @@ async def test_get_product_not_found(client):
     response = await client.get(f"/api/v1/catalog/products/{fake_id}")
 
     assert response.status_code == 404
-    assert "detail" in response.json()
+    data = response.json()
+    assert "code" in data
+    assert "message" in data
 
 
 async def test_get_similar_products(client):
@@ -187,11 +189,17 @@ async def test_catalog_invalid_limit(client):
         params={"limit": 9999},
     )
     assert response.status_code == 422
+    data = response.json()
+    assert data["code"] == "VALIDATION_ERROR"
+    assert "message" in data
 
 
 async def test_catalog_invalid_uuid(client):
     response = await client.get("/api/v1/catalog/products/not-a-uuid")
     assert response.status_code == 422
+    data = response.json()
+    assert data["code"] == "VALIDATION_ERROR"
+    assert "message" in data
 
 
 async def test_b2b_unavailable_returns_502(client):
@@ -206,7 +214,9 @@ async def test_b2b_unavailable_returns_502(client):
         response = await client.get("/api/v1/catalog/products")
 
     assert response.status_code in (502, 503, 504)
-    assert "detail" in response.json()
+    data = response.json()
+    assert data["code"] == "B2B_UNAVAILABLE"
+    assert "message" in data
 
 
 async def test_invalid_sort_returns_400(client):
@@ -216,6 +226,7 @@ async def test_invalid_sort_returns_400(client):
     )
     assert response.status_code == 400
     data = response.json()
-    assert "detail" in data
+    assert data["code"] == "INVALID_REQUEST"
+    assert "message" in data
     valid_values = ["popularity", "price_asc", "price_desc", "new"]
-    assert any(v in data["detail"] for v in valid_values)
+    assert any(v in data["message"] for v in valid_values)

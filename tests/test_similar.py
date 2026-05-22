@@ -60,4 +60,6 @@ async def test_unknown_product_returns_404(client):
     fake_id = uuid4()
     response = await client.get(f"/api/v1/catalog/products/{fake_id}/similar")
     assert response.status_code == 404
-    assert "detail" in response.json()
+    data = response.json()
+    assert "code" in data
+    assert "message" in data

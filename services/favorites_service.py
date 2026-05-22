@@ -11,6 +11,10 @@ from services.b2b import get_b2b_client
 from helpers.help import _catalog_card_from_b2b
 
 
+def _error_detail(code: str, message: str) -> dict:
+    return {"code": code, "message": message}
+
+
 async def get_favorites(db: AsyncSession, buyer_id: UUID, limit: int, offset: int) -> PaginatedCatalogProducts:
     total_query = select(func.count(Favorite.id)).where(Favorite.buyer_id == buyer_id)
     total_count = (await db.execute(total_query)).scalar_one()
@@ -52,7 +56,10 @@ async def add_to_favorites(db: AsyncSession, buyer_id: UUID, product_id: UUID) -
         product = await get_b2b_client().get_product(product_id)
     except HTTPException as exc:
         if exc.status_code == 404:
-            raise HTTPException(status_code=404, detail="Товар не найден в каталоге")
+            raise HTTPException(
+                status_code=404,
+                detail=_error_detail("PRODUCT_NOT_FOUND", "Product not found in catalog"),
+            )
         raise
 
     result = await db.execute(
@@ -104,14 +111,17 @@ async def subscribe_to_product(db: AsyncSession, user_id: UUID, product_id: UUID
         await get_b2b_client().get_product(product_id)
     except HTTPException as exc:
         if exc.status_code == 404:
-            raise HTTPException(status_code=404, detail="Товар не найден в каталоге")
+            raise HTTPException(
+                status_code=404,
+                detail=_error_detail("PRODUCT_NOT_FOUND", "Product not found in catalog"),
+            )
         raise
 
     if data is not None:
         if data.events is not None and len(data.events) == 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Список событий не может быть пустым"
+                detail=_error_detail("INVALID_REQUEST", "Event list cannot be empty"),
             )
         events = data.events if data.events else ["BACK_IN_STOCK", "PRICE_DROP"]
     else:
@@ -126,7 +136,7 @@ async def subscribe_to_product(db: AsyncSession, user_id: UUID, product_id: UUID
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Подписка уже существует",
+            detail=_error_detail("SUBSCRIPTION_EXISTS", "Subscription already exists"),
         )
 
     subscription = ProductSubscription(
