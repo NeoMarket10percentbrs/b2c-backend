@@ -21,7 +21,7 @@ async def list_favorites(
     return await favorites_service.get_favorites(db, buyer.id, limit, offset)
 
 
-@favorites_router.put("/{product_id}", status_code=status.HTTP_201_CREATED)
+@favorites_router.put("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def add_favorite(
     product_id: UUID, buyer: Buyer = Depends(get_current_buyer),
     db: AsyncSession = Depends(get_db)

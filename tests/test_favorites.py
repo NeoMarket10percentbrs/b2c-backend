@@ -59,24 +59,29 @@ async def existing_product_id(client):
     return items[0]["id"]
 
 
-async def test_add_to_favorites_returns_201(client, auth_buyer, existing_product_id):
+async def test_add_to_favorites_returns_204(client, auth_buyer, existing_product_id):
     buyer, token = auth_buyer
     response = await client.put(
         f"/api/v1/favorites/{existing_product_id}",
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert response.status_code == 201
+    assert response.status_code == 204
 
 
-async def test_repeat_add_returns_201_not_duplicate(client, auth_buyer, existing_product_id):
+async def test_repeat_add_returns_204_not_duplicate(client, auth_buyer, existing_product_id):
     buyer, token = auth_buyer
 
     response = await client.put(
         f"/api/v1/favorites/{existing_product_id}",
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert response.status_code == 201
+    assert response.status_code == 204
 
+    response = await client.put(
+        f"/api/v1/favorites/{existing_product_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 204
     async for db in get_db():
         result = await db.execute(
             select(Favorite).where(

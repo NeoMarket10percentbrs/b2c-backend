@@ -16,38 +16,34 @@ def _error_detail(code: str, message: str) -> dict:
 
 
 async def get_favorites(db: AsyncSession, buyer_id: UUID, limit: int, offset: int) -> PaginatedCatalogProducts:
-    total_query = select(func.count(Favorite.id)).where(Favorite.buyer_id == buyer_id)
-    total_count = (await db.execute(total_query)).scalar_one()
-
-    result = await db.execute(
-        select(Favorite)
+    all_favs = (await db.execute(
+        select(Favorite.product_id, Favorite.created_at)
         .where(Favorite.buyer_id == buyer_id)
         .order_by(Favorite.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    favorites = list(result.scalars().all())
+    )).all()
 
-    if not favorites:
+    if not all_favs:
         return PaginatedCatalogProducts(
-            items=[], total_count=total_count, limit=limit, offset=offset
+            items=[], total_count=0, limit=limit, offset=offset
         )
-    try:
-        products = await get_b2b_client().get_products_by_ids(
-            [f.product_id for f in favorites]
-        )
-    except HTTPException:
-        products = {}
+    products = await get_b2b_client().get_products_by_ids(
+        [row.product_id for row in all_favs]
+    )
 
-    items: list[CatalogProductCard] = []
-    for fav in favorites:
-        product = products.get(fav.product_id)
-        if product is None:
-            continue
-        items.append(_catalog_card_from_b2b(product))
+    items = []
+    for product_id, _ in all_favs:
+        product = products.get(product_id)
+        if product is not None:
+            items.append(_catalog_card_from_b2b(product))
+
+    total_count = len(items)
+    paginated_items = items[offset:offset + limit]
 
     return PaginatedCatalogProducts(
-        items=items, total_count=total_count, limit=limit, offset=offset
+        items=paginated_items,
+        total_count=total_count,
+        limit=limit,
+        offset=offset
     )
 
 
