@@ -185,16 +185,21 @@ async def build_cart_response(cart: Cart, b2b: B2BClient) -> CartResponse:
                     sku_id=item.sku_id,
                     quantity=item.quantity,
                     is_available=False,
+                    line_total=0,
+                    unit_price=0,
                 )
             )
             is_valid = False
             continue
         stock = int(sku.get("stock_quantity", 0))
         unit_price = int(sku.get("price") or 0)
-        line_total = unit_price * item.quantity
-        subtotal += line_total
-        if stock < item.quantity:
+        available = stock >= item.quantity
+        line_total = unit_price * item.quantity if available else 0
+        if not available:
             is_valid = False
+        
+        subtotal += line_total
+
         items_resp.append(
             CartItem(
                 sku_id=item.sku_id,
@@ -206,7 +211,7 @@ async def build_cart_response(cart: Cart, b2b: B2BClient) -> CartResponse:
                 unit_price_at_add=None,
                 line_total=line_total,
                 available_quantity=stock,
-                is_available=stock >= item.quantity,
+                is_available=available,
                 image=None,
             )
         )
