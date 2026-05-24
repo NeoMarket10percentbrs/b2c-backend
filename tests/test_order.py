@@ -1,5 +1,3 @@
-# tests/test_order.py
-
 import asyncio
 import pytest
 from uuid import uuid4, UUID
@@ -19,12 +17,13 @@ from models.order import Order
 from models.order_item import OrderItem
 from services.b2b import init_b2b_client, close_b2b_client, B2BClient
 
+
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
-# ---------- инициализация БД и B2B ----------
+
+# инициализация БД и B2B
 @pytest.fixture(scope="session", autouse=True)
 async def init_db():
-    # Подготавливаем БД
     for _ in range(10):
         try:
             async with engine.begin() as conn:
@@ -33,19 +32,17 @@ async def init_db():
         except Exception:
             await asyncio.sleep(1)
 
-    # Настраиваем B2B‑клиент на реальный сервис (из вашего .env)
-    settings.B2B_BASE_URL = "http://localhost:8000"
-    settings.B2C_SERVICE_KEY = "67277c5e88976543b83"   # реальный ключ!
-
     init_b2b_client()
     yield
     await close_b2b_client()
     await engine.dispose()
 
+
 @pytest.fixture(scope="module")
 async def db_session():
     async with AsyncSessionLocal() as session:
         yield session
+
 
 @pytest.fixture(scope="module")
 async def buyer_token(db_session):
@@ -73,6 +70,7 @@ async def buyer_token(db_session):
     await db_session.execute(delete(Buyer).where(Buyer.id == buyer_id))
     await db_session.commit()
 
+
 @pytest.fixture(scope="module")
 async def client(buyer_token):
     transport = ASGITransport(app=app)
@@ -82,6 +80,7 @@ async def client(buyer_token):
         headers={"Authorization": f"Bearer {token}"}
     ) as ac:
         yield ac
+
 
 @pytest.fixture(scope="module")
 async def real_sku(client):
@@ -103,10 +102,10 @@ async def real_sku(client):
             return sku
     pytest.skip("Нет SKU с положительным остатком")
 
-# Заголовки для прямых вызовов B2B‑сервиса (inventory)
 @pytest.fixture
 def b2b_headers():
-    return {"X-Service-Key": "67277c5e88976543b83"}
+    return {"X-Service-Key": settings.B2C_SERVICE_KEY}
+
 
 async def _create_address(db_session, buyer_id: UUID) -> Address:
     address = Address(
@@ -120,6 +119,7 @@ async def _create_address(db_session, buyer_id: UUID) -> Address:
     await db_session.refresh(address)
     return address
 
+
 async def _create_payment_method(db_session, buyer_id: UUID) -> PaymentMethod:
     pm = PaymentMethod(
         id=uuid4(), buyer_id=buyer_id, type="CARD",
@@ -130,12 +130,14 @@ async def _create_payment_method(db_session, buyer_id: UUID) -> PaymentMethod:
     await db_session.refresh(pm)
     return pm
 
+
 async def _fill_cart_via_api(client, sku_id: str, quantity: int):
     resp = await client.post(
         "/api/v1/cart/items",
         json={"sku_id": sku_id, "quantity": quantity},
     )
     assert resp.status_code == 200
+
 
 # ============================================================
 async def test_checkout_creates_paid_order_with_fixed_prices(
@@ -170,6 +172,7 @@ async def test_checkout_creates_paid_order_with_fixed_prices(
     assert item["quantity"] == 2
     assert item["sku_id"] == sku_id
 
+
 # ============================================================
 async def test_partial_reserve_failure_returns_409(
     client, db_session, buyer_token, real_sku, b2b_headers
@@ -180,9 +183,8 @@ async def test_partial_reserve_failure_returns_409(
     available = real_sku.get("available_quantity", 1)
     await _fill_cart_via_api(client, sku_id, available)
 
-    # Резервируем 1 единицу напрямую через B2B‑сервис
     reserve_key = str(uuid4())
-    async with AsyncClient(base_url="http://localhost:8000") as b2b_client:
+    async with AsyncClient(base_url=settings.B2B_BASE_URL) as b2b_client:
         reserve_resp = await b2b_client.post(
             "/api/v1/inventory/reserve",
             headers=b2b_headers,
@@ -210,14 +212,14 @@ async def test_partial_reserve_failure_returns_409(
     if "details" in data and isinstance(data["details"], dict):
         assert "failed_items" in data["details"]
 
-    # Возвращаем резерв обратно
-    async with AsyncClient(base_url="http://localhost:8000") as b2b_client:
+    async with AsyncClient(base_url=settings.B2B_BASE_URL) as b2b_client:
         unreserve_resp = await b2b_client.post(
             "/api/v1/inventory/unreserve",
             headers=b2b_headers,
             json={"order_id": reserve_key, "items": [{"sku_id": sku_id, "quantity": 1}]},
         )
     assert unreserve_resp.status_code == 200
+
 
 # ============================================================
 async def test_idempotency_returns_existing_order(
@@ -243,6 +245,7 @@ async def test_idempotency_returns_existing_order(
     order2 = resp2.json()
     assert order2["id"] == order1["id"]
 
+
 # ============================================================
 async def test_b2b_unavailable_returns_503(client, db_session, buyer_token, real_sku):
     await client.delete("/api/v1/cart")
@@ -253,7 +256,6 @@ async def test_b2b_unavailable_returns_503(client, db_session, buyer_token, real
     payment_method = await _create_payment_method(db_session, UUID(buyer_id))
     await _fill_cart_via_api(client, sku_id, 1)
 
-    # Создаём клиент с неверным URL
     bad_client = B2BClient(
         base_url="http://localhost:19999",
         service_key=settings.B2C_SERVICE_KEY,
