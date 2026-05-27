@@ -288,11 +288,15 @@ async def list_orders(db: AsyncSession, buyer_id: UUID, limit: int, offset: int,
             )
         total_q = total_q.where(Order.status == status_value)
     total = (await db.execute(total_q)).scalar_one()
-
     items_q = (
         select(Order)
         .where(Order.buyer_id == buyer_id)
         .order_by(Order.created_at.desc())
+        .options(
+            selectinload(Order.items),
+            selectinload(Order.address),
+            selectinload(Order.payment_method),
+        )
         .limit(limit)
         .offset(offset)
     )

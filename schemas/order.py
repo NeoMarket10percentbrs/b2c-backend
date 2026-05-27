@@ -24,6 +24,8 @@ class OrderCancelRequest(BaseModel):
 
 
 class OrderItem(BaseModel):
+	model_config = ConfigDict(from_attributes=True)
+	
 	sku_id: UUID
 	product_id: UUID
 	name: str
@@ -65,7 +67,7 @@ class OrderShortResponse(BaseModel):
 
 
 class PaginatedOrders(BaseModel):
-	items: list[OrderShortResponse]
+	items: list[OrderResponse]
 	total_count: int
 	limit: int
 	offset: int

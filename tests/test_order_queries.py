@@ -125,8 +125,10 @@ async def payment_method(db_session, buyer1):
 
 
 #  Helper 
-async def _create_order(db_session, buyer_id, address_id, payment_method_id,
-                        status=OrderStatus.PAID, items_data=None):
+async def _create_order(
+    db_session, buyer_id, address_id,
+    payment_method_id,status=OrderStatus.PAID, items_data=None
+):
     """Create an order directly in DB with optional custom items."""
     order_id = uuid4()
     order = Order(
@@ -224,8 +226,10 @@ async def test_order_detail_shows_fixed_prices(
             "quantity": 2,
         }
     ]
-    order = await _create_order(db_session, buyer1.id, address.id, payment_method.id,
-                                items_data=items_data)
+    order = await _create_order(
+        db_session, buyer1.id, address.id,
+        payment_method.id, items_data=items_data
+    )
     headers = {"Authorization": f"Bearer {buyer1_token}"}
     resp = await client.get(f"/api/v1/orders/{order.id}", headers=headers)
     assert resp.status_code == 200

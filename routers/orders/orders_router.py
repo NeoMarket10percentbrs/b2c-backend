@@ -38,7 +38,7 @@ async def list_orders(
     db: AsyncSession = Depends(get_db)
 ):
     total, orders = await order_service.list_orders(db, buyer.id, limit, offset, status)
-    items = [OrderShortResponse.model_validate(o) for o in orders]
+    items = [OrderResponse.model_validate(o) for o in orders]
     return PaginatedOrders(total_count=total, limit=limit, offset=offset, items=items)
 
 
