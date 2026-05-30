@@ -65,3 +65,16 @@ async def test_empty_results_returns_200(client):
     assert isinstance(data["items"], list)
     assert data["total_count"] == 0
     assert data["items"] == []
+
+
+async def test_search_inside_category(client):
+    cats = await client.get("/api/v1/catalog/categories")
+    cat = cats.json()[0]
+    
+    resp = await client.get("/api/v1/catalog/products", params={
+        "q": "тел",
+        "filter[category_id]": cat["id"]
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data["items"], list)

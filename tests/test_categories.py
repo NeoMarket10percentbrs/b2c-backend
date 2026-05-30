@@ -71,15 +71,6 @@ async def test_breadcrumbs_unknown_category_returns_404(client):
     assert data["code"] == "CATEGORY_NOT_FOUND"
     assert "message" in data
 
-async def test_ambiguous_params_returns_400(client):
-    response = await client.get(
-        "/api/v1/catalog/products",
-        params={"q": "телефон", "filter[category_id]": str(uuid4())},
-    )
-    assert response.status_code == 400
-    data = response.json()
-    assert data["code"] == "INVALID_REQUEST"
-    assert "message" in data
 
 async def test_orphan_category_returns_422(client, monkeypatch):
     from services.b2b import B2BClient

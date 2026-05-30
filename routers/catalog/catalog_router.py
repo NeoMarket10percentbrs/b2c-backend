@@ -46,11 +46,11 @@ async def list_products(
 ):
     b2b = get_b2b_client()
     filters = _parse_filters(request)
-    if q and filter_category_id:
-        raise HTTPException(
-            status_code=400,
-            detail=_error_detail("INVALID_REQUEST", "Нельзя одновременно использовать поиск (q) и фильтр по категории")
-        )
+    # if q and filter_category_id:
+    #     raise HTTPException(
+    #         status_code=400,
+    #         detail=_error_detail("INVALID_REQUEST", "Нельзя одновременно использовать поиск (q) и фильтр по категории")
+    #     )
     data = await b2b.list_products(
         category_id=filter_category_id,
         search=q,
