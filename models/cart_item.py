@@ -1,6 +1,6 @@
 import uuid
 from typing import TYPE_CHECKING
-from sqlalchemy import Integer, ForeignKey, CheckConstraint, UniqueConstraint
+from sqlalchemy import BigInteger, Integer, ForeignKey, CheckConstraint, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from core.database import Base, TimestampMixin
@@ -29,6 +29,7 @@ class CartItem(Base, TimestampMixin):
 	)
 	sku_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 	quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+	unit_price_at_add: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 	# Relationships
 	cart: Mapped["Cart"] = relationship(back_populates="items")

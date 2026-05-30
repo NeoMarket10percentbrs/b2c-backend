@@ -2,7 +2,7 @@ import asyncio
 import pytest
 from uuid import uuid4, UUID
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from sqlalchemy import delete
 from core.config import settings
 from core.database import AsyncSessionLocal, Base, engine
@@ -15,7 +15,7 @@ from models.cart import Cart
 from models.cart_item import CartItem
 from models.order import Order
 from models.order_item import OrderItem
-from services.b2b import init_b2b_client, close_b2b_client, B2BClient
+from services.b2b import get_b2b_client, init_b2b_client, close_b2b_client, B2BClient
 
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
@@ -180,45 +180,30 @@ async def test_partial_reserve_failure_returns_409(
     await client.delete("/api/v1/cart")
     _, buyer_id = buyer_token
     sku_id = real_sku["id"]
-    available = real_sku.get("available_quantity", 1)
-    await _fill_cart_via_api(client, sku_id, available)
-
-    reserve_key = str(uuid4())
-    async with AsyncClient(base_url=settings.B2B_BASE_URL) as b2b_client:
-        reserve_resp = await b2b_client.post(
-            "/api/v1/inventory/reserve",
-            headers=b2b_headers,
-            json={
-                "idempotency_key": reserve_key,
-                "order_id": str(uuid4()),
-                "items": [{"sku_id": sku_id, "quantity": 1}],
-            },
-        )
-    assert reserve_resp.status_code == 200, f"Не удалось зарезервировать: {reserve_resp.text}"
 
     address = await _create_address(db_session, UUID(buyer_id))
     payment_method = await _create_payment_method(db_session, UUID(buyer_id))
-    resp = await client.post(
-        "/api/v1/orders",
-        headers={"Idempotency-Key": str(uuid4())},
-        json={
-            "address_id": str(address.id),
-            "payment_method_id": str(payment_method.id),
-        },
-    )
-    assert resp.status_code == 409
+    await _fill_cart_via_api(client, sku_id, 1)
+
+    b2b_instance = get_b2b_client()
+    with patch.object(b2b_instance, "reserve", new_callable=AsyncMock) as mock_reserve:
+        mock_reserve.return_value = {
+            "reserved": False,
+            "failed_items": [{"sku_id": sku_id, "requested": 1, "available": 0}]
+        }
+        resp = await client.post(
+            "/api/v1/orders",
+            headers={"Idempotency-Key": str(uuid4())},
+            json={
+                "address_id": str(address.id),
+                "payment_method_id": str(payment_method.id),
+            },
+        )
+    assert resp.status_code == 409, f"Expected 409, got {resp.status_code}"
     data = resp.json()
     assert "code" in data and "message" in data
     if "details" in data and isinstance(data["details"], dict):
         assert "failed_items" in data["details"]
-
-    async with AsyncClient(base_url=settings.B2B_BASE_URL) as b2b_client:
-        unreserve_resp = await b2b_client.post(
-            "/api/v1/inventory/unreserve",
-            headers=b2b_headers,
-            json={"order_id": reserve_key, "items": [{"sku_id": sku_id, "quantity": 1}]},
-        )
-    assert unreserve_resp.status_code == 200
 
 
 # ============================================================

@@ -1,12 +1,15 @@
 import pytest
-from uuid import uuid4
+from uuid import uuid4, UUID
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import select, delete
 from main import app
+from unittest.mock import patch, AsyncMock
 from asgi_lifespan import LifespanManager
+from core.config import settings
 from core.database import get_db
 from models.cart import Cart
 from models.cart_item import CartItem as CartItemModel
+from services.b2b import B2BClient
 
 
 @pytest.fixture(scope="module")
@@ -192,3 +195,126 @@ async def test_update_missing_cart_item_returns_404(client):
     data = response.json()
     assert data["code"] == "CART_ITEM_NOT_FOUND"
     assert "message" in data
+
+
+# ---------------- новые тесты валидации корзины (реальные данные + изолированный B2B) ----------------
+async def _add_sku_to_cart(client, token, sku_id, quantity=1):
+    headers = {"Authorization": f"Bearer {token}"}
+    await client.delete("/api/v1/cart", headers=headers)
+    resp = await client.post(
+        "/api/v1/cart/items", 
+        json={"sku_id": sku_id, "quantity": quantity}, 
+        headers=headers
+    )
+    assert resp.status_code == 200
+
+async def test_validate_valid(client, auth_token, real_sku):
+    token, _ = auth_token
+    await _add_sku_to_cart(client, token, real_sku["id"])
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = await client.post("/api/v1/cart/validate", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["is_valid"] is True
+    assert len(data["issues"]) == 0
+
+async def test_validate_price_changed(client, auth_token, real_sku):
+    token, _ = auth_token
+    await _add_sku_to_cart(client, token, real_sku["id"])
+    new_price = real_sku["price"] + 500
+    mock_product = {
+        "id": real_sku["product_id"],
+        "status": "MODERATED",
+        "skus": [{**real_sku, "price": new_price}]
+    }
+    with patch.object(
+        B2BClient,
+        "get_products_by_ids",
+        AsyncMock(return_value={UUID(real_sku["product_id"]): mock_product})
+    ):
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = await client.post("/api/v1/cart/validate", headers=headers)
+    data = resp.json()
+    issues = data["issues"]
+    price_issue = next((i for i in issues if i["type"] == "PRICE_CHANGED"), None)
+    assert price_issue is not None, f"No PRICE_CHANGED, issues: {issues}"
+    assert price_issue["old_value"] == real_sku["price"]
+    assert price_issue["new_value"] == new_price
+
+async def test_validate_product_blocked(client, auth_token, real_sku):
+    token, _ = auth_token
+    await _add_sku_to_cart(client, token, real_sku["id"])
+    mock_product = {
+        "id": real_sku["product_id"],
+        "status": "BLOCKED",
+        "skus": [real_sku]
+    }
+    with patch.object(
+        B2BClient, 
+        "get_products_by_ids", 
+        AsyncMock(return_value={UUID(real_sku["product_id"]): mock_product})
+    ):
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = await client.post("/api/v1/cart/validate", headers=headers)
+    data = resp.json()
+    issues = data["issues"]
+    assert any(i["type"] == "PRODUCT_BLOCKED" for i in issues)
+
+async def test_validate_out_of_stock(client, auth_token, real_sku):
+    token, _ = auth_token
+    await _add_sku_to_cart(client, token, real_sku["id"])
+    mock_sku = {**real_sku, "active_quantity": 0}
+    mock_product = {
+        "id": real_sku["product_id"],
+        "status": "MODERATED",
+        "skus": [mock_sku]
+    }
+    with patch.object(
+        B2BClient, 
+        "get_products_by_ids", 
+        AsyncMock(return_value={UUID(real_sku["product_id"]): mock_product})
+    ):
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = await client.post("/api/v1/cart/validate", headers=headers)
+    data = resp.json()
+    issues = data["issues"]
+    assert any(i["type"] == "OUT_OF_STOCK" for i in issues)
+
+async def test_validate_quantity_reduced(client, auth_token, real_sku):
+    token, _ = auth_token
+    await _add_sku_to_cart(client, token, real_sku["id"], quantity=3)
+    mock_sku = {**real_sku, "active_quantity": 1}
+    mock_product = {
+        "id": real_sku["product_id"],
+        "status": "MODERATED",
+        "skus": [mock_sku]
+    }
+    with patch.object(
+        B2BClient,
+        "get_products_by_ids",
+        AsyncMock(return_value={UUID(real_sku["product_id"]): mock_product})
+    ):
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = await client.post("/api/v1/cart/validate", headers=headers)
+    data = resp.json()
+    issues = data["issues"]
+    assert any(i["type"] == "QUANTITY_REDUCED" for i in issues)
+
+async def test_validate_product_deleted(client, auth_token, real_sku):
+    token, _ = auth_token
+    await _add_sku_to_cart(client, token, real_sku["id"])
+    mock_product = {
+        "id": real_sku["product_id"],
+        "status": "MODERATED",
+        "skus": []
+    }
+    with patch.object(
+        B2BClient, 
+        "get_products_by_ids", 
+        AsyncMock(return_value={UUID(real_sku["product_id"]): mock_product})
+        ):
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = await client.post("/api/v1/cart/validate", headers=headers)
+    data = resp.json()
+    issues = data["issues"]
+    assert any(i["type"] == "PRODUCT_DELETED" for i in issues)

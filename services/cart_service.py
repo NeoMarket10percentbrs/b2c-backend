@@ -62,7 +62,7 @@ async def add_item(
     existing = next((i for i in cart.items if i.sku_id == sku_id), None)
     new_qty = (existing.quantity if existing else 0) + quantity
 
-    stock = int(sku.get("stock_quantity") or 0)
+    stock = int(sku.get("active_quantity") or 0)
     if stock < new_qty:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -82,7 +82,8 @@ async def add_item(
                 cart_id=cart.id,
                 sku_id=sku_id,
                 product_id=UUID(sku["product_id"]),
-                quantity=quantity
+                quantity=quantity,
+                unit_price_at_add=int(sku.get("price") or 0),
             )
         )
 
@@ -117,7 +118,7 @@ async def update_item(
             detail=_error_detail("SKU_UNAVAILABLE", "SKU is no longer available in catalog"),
         )
 
-    stock = int(sku.get("stock_quantity") or 0)
+    stock = int(sku.get("active_quantity") or 0)
     if stock < quantity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -184,14 +185,20 @@ async def build_cart_response(cart: Cart, b2b: B2BClient) -> CartResponse:
                 CartItem(
                     sku_id=item.sku_id,
                     quantity=item.quantity,
-                    is_available=False,
-                    line_total=0,
+                    product_id=item.product_id,
+                    name="Unknown",
+                    sku_code=None,
                     unit_price=0,
+                    unit_price_at_add=item.unit_price_at_add,
+                    line_total=0,
+                    available_quantity=0,
+                    is_available=False,
+                    image=None,
                 )
             )
             is_valid = False
             continue
-        stock = int(sku.get("stock_quantity", 0))
+        stock = int(sku.get("active_quantity", 0))
         unit_price = int(sku.get("price") or 0)
         available = stock >= item.quantity
         line_total = unit_price * item.quantity if available else 0
@@ -205,10 +212,10 @@ async def build_cart_response(cart: Cart, b2b: B2BClient) -> CartResponse:
                 sku_id=item.sku_id,
                 quantity=item.quantity,
                 product_id=item.product_id,
-                name=sku.get("product_title") or sku.get("name"),
+                name=sku.get("product_title") or sku.get("name") or "Unknown",
                 sku_code=sku.get("sku_code"),
                 unit_price=unit_price,
-                unit_price_at_add=None,
+                unit_price_at_add=item.unit_price_at_add,
                 line_total=line_total,
                 available_quantity=stock,
                 is_available=available,
@@ -252,7 +259,35 @@ async def validate_cart(cart: Cart, b2b: B2BClient) -> CartValidationResponse:
                 )
             )
             continue
-        stock = int(sku.get("stock_quantity", 0))
+        product_data = None
+        for p in products.values():
+            if any(s.get("id") == str(item.sku_id) for s in p.get("skus", [])):
+                product_data = p
+                break
+
+        if product_data and product_data.get("status") in ("BLOCKED", "HARD_BLOCKED"):
+            issues.append(
+                CartValidationIssue(
+                    sku_id=item.sku_id,
+                    type="PRODUCT_BLOCKED",
+                    message="Product is blocked",
+                )
+            )
+            continue
+
+        current_price = int(sku.get("price") or 0)
+        if item.unit_price_at_add is not None and current_price != item.unit_price_at_add:
+            issues.append(
+                CartValidationIssue(
+                    sku_id=item.sku_id,
+                    type="PRICE_CHANGED",
+                    message="Price has changed",
+                    old_value=item.unit_price_at_add,
+                    new_value=current_price,
+                )
+            )
+
+        stock = int(sku.get("active_quantity", 0))
         if stock <= 0:
             issues.append(
                 CartValidationIssue(

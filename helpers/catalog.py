@@ -83,6 +83,7 @@ def adapt_product_detail(b2b_product: dict) -> CatalogProductDetail:
             attrs = sku_characteristics
         sku_dict = {
             "id": s["id"],
+            "product_id": s.get("product_id"),
             "name": s.get("name"),
             "sku_code": s.get("sku_code"),
             "price": int(s.get("price", 0)),
