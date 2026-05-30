@@ -74,24 +74,31 @@ def adapt_product_card(b2b_product: dict) -> CatalogProductCard:
 
 def adapt_product_detail(b2b_product: dict) -> CatalogProductDetail:
     base = adapt_product_card(b2b_product)
+    skus = []
+    for s in b2b_product.get("skus", []):
+        sku_characteristics = s.get("characteristics")
+        if isinstance(sku_characteristics, list):
+            attrs = {c["name"]: c.get("value") for c in sku_characteristics if "name" in c}
+        else:
+            attrs = sku_characteristics
+        sku_dict = {
+            "id": s["id"],
+            "name": s.get("name"),
+            "sku_code": s.get("sku_code"),
+            "price": int(s.get("price", 0)),
+            "old_price": (int(s.get("price", 0)) + int(s.get("discount", 0))) if int(s.get("discount", 0)) > 0 else None,
+            "available_quantity": int(s.get("active_quantity", 0)),
+            "is_available": int(s.get("active_quantity", 0)) > 0,
+            "attributes": attrs,
+            "images": [ImageRef(id=i.get("id"), url=i["url"], alt=i.get("alt"), ordering=i.get("ordering",0), is_main=i.get("ordering")==0) for i in s.get("images", [])],
+        }
+        skus.append(sku_dict)
+
     return CatalogProductDetail(
         **base.model_dump(),
         description=b2b_product.get("description") or "",
         characteristics=b2b_product.get("characteristics", []),
-        skus=[
-            {
-                "id": s["id"],
-                "name": s.get("name"),
-                "sku_code": s.get("sku_code"),
-                "price": int(s.get("price", 0)),
-                "old_price": (int(s.get("price", 0)) + int(s.get("discount", 0))) if int(s.get("discount", 0)) > 0 else None,
-                "available_quantity": int(s.get("active_quantity", 0)),
-                "is_available": int(s.get("active_quantity", 0)) > 0,
-                "attributes": s.get("attributes"),
-                "images": [ImageRef(id=i.get("id"), url=i["url"], alt=i.get("alt"), ordering=i.get("ordering",0), is_main=i.get("ordering")==0) for i in s.get("images", [])],
-            }
-            for s in b2b_product.get("skus", [])
-        ],
+        skus=skus,
         created_at=b2b_product["created_at"],
         updated_at=b2b_product["updated_at"],
     )
